@@ -6,13 +6,13 @@ O Note to Note reúne notas interativas em **DataviewJS** e um plugin complement
 
 O projeto utiliza integrações com **Last.fm**, **Spotify**, **MediaDB** e, no relatório, **Deezer**. Os dados de cada usuário ficam no próprio cofre; o código distribuído não precisa conter credenciais pessoais.
 
-> **Status:** módulos principais funcionais. O **Note to Note Manager** (instalador e atualizador pelo GitHub) está planejado e **ainda não está disponível**.
+> **Status:** módulos principais funcionais. Instalação inicial pelo [bootstrap](Instalador.md) e gerenciamento de módulos e atualizações pela **Central de Configurações V2.3.2**, testados no Obsidian Desktop e Mobile.
 
 ## ✨ Funcionalidades
 
 | Módulo | Versão dos arquivos atuais | O que faz |
 | --- | --- | --- |
-| **Central de Configurações** | V2.2 | Configura Last.fm, integrações, diretórios e auxilia na instalação do plugin CataloguedAt. |
+| **Central de Configurações** | V2.3.2 | Configura Last.fm, integrações, diretórios e auxilia na instalação do plugin CataloguedAt. |
 | **Diário Note to Note** | V1.1 | Organiza álbuns catalogados, permite busca, filtros, estatísticas e registros manuais ou via MediaDB. |
 | **Central de Descoberta** | V1.3 | Recomenda álbuns a partir de fontes musicais e considera o catálogo existente e a biblioteca Spotify para evitar repetições. |
 | **Roleta Note to Note** | V0.43 | Sorteia álbuns com filtros de catálogo, notas, tempo de catalogação, gêneros e scrobbles. |
@@ -31,36 +31,41 @@ O projeto utiliza integrações com **Last.fm**, **Spotify**, **MediaDB** e, no 
 
 Algumas funcionalidades podem operar parcialmente sem determinadas integrações; outras exigem que elas estejam configuradas.
 
-## 🚀 Instalação manual (atual)
+## 🚀 Instalação pelo bootstrap (recomendada)
 
-1. Instale e ative os plugins da comunidade necessários, especialmente **Dataview**.
-2. Ative a opção de execução de JavaScript nas configurações do Dataview.
-3. Crie uma pasta `Musicas/` no seu cofre.
-4. Copie o conteúdo de **Configurações.md** para uma nota do Obsidian e abra-a em modo de leitura para executar o bloco DataviewJS.
-5. Na Central de Configurações, informe seu usuário e sua API Key do Last.fm, configure o Spotify API quando necessário e salve as configurações.
-6. Crie notas separadas para **Diário Note to Note**, **Central**, **Roleta**, **Monitor** e **Relatório**, copiando o conteúdo dos respectivos arquivos `.md`.
-7. Para instalar o **CataloguedAt**, utilize a opção disponível no configurador ou instale manualmente o `main.js` e o `manifest.json` na pasta de plugin correspondente do Obsidian.
+O **[Instalador.md](Instalador.md)** é o instalador inicial do Note to Note. Ele busca a última release estável no GitHub e instala a **Central de Configurações**; a partir dela, você instala e atualiza os demais módulos.
 
-> Os arquivos usam `Musicas/` como caminho padrão. Se você alterar os diretórios no configurador, confira se os módulos e o plugin atendem à estrutura escolhida. O CataloguedAt V3.1.0 observa especificamente notas criadas diretamente em `Musicas/`.
+1. Instale e ative o **Dataview** no Obsidian e habilite a execução de consultas JavaScript nas configurações do plugin.
+2. Abra o arquivo **[Instalador.md](Instalador.md)** no GitHub, copie seu conteúdo integral para uma nova nota no seu cofre e abra essa nota no modo de leitura.
+3. Clique em **Verificar release** e depois em **Instalar Central de Configurações**.
+4. Abra a nota instalada em `Musicas/Sistema/Configurações.md`.
+5. Na seção **Note to Note**, instale os módulos desejados individualmente ou todos de uma vez.
+6. Configure suas integrações (Last.fm, Spotify API e MediaDB, conforme os recursos que pretende usar) e, se necessário, instale o plugin **CataloguedAt** pela Central.
 
-### Estrutura ilustrativa
+**[Abrir instalador inicial →](Instalador.md)** · **[Ver última release →](https://github.com/heitormiguelviana/note-to-note/releases/latest)**
+
+> O bootstrap instala apenas a Central de Configurações. Os demais módulos são instalados por ela. Revise o código antes de executá-lo e mantenha um backup do cofre, especialmente se já possui notas ou sistemas instalados.
+
+### Estrutura de instalação
 
 ```text
 SeuCofre/
 ├── Musicas/
 │   ├── Sistema/
-│   │   └── Configuracoes.json    # criado localmente pelo configurador
-│   ├── Central/
+│   │   ├── Configurações.md
+│   │   ├── Configuracoes.json           # configurações locais, não distribuídas
+│   │   ├── NoteToNote-Instalacao.json   # registro de versões instaladas
+│   │   └── Backups/
+│   │       └── Note to Note/
 │   └── [notas dos álbuns].md
-├── Configurações.md
-├── Diário Note to Note.md
 ├── Central.md
-├── Roleta.md
+├── Diário Musical.md
 ├── Monitor.md
-└── Relatório.md
+├── Relatório.md
+└── Roleta.md
 ```
 
-A localização das notas de interface acima é apenas um exemplo; a pasta de catálogo é configurável em parte do sistema.
+Os cinco módulos musicais são instalados na raiz do cofre; apenas a Central de Configurações fica em `Musicas/Sistema/`. A nota temporária do instalador pode ser mantida onde preferir.
 
 ## 🔐 Privacidade e segurança
 
@@ -98,9 +103,11 @@ Esse bloco é **apenas um exemplo ilustrativo** de metadados; o template e os ca
 
 ## 🔄 Atualizações
 
-O projeto prevê um **Note to Note Manager**, responsável por instalar e atualizar componentes a partir de versões publicadas no GitHub, preservando configurações e dados pessoais. Essa funcionalidade **ainda está em desenvolvimento**.
+A **Central de Configurações V2.3.2** possui um gerenciador integrado que consulta a [última release estável](https://github.com/heitormiguelviana/note-to-note/releases/latest), identifica módulos instalados, ausentes ou modificados e permite instalar ou atualizar cada módulo individualmente ou em conjunto.
 
-Até sua disponibilização, as atualizações dos módulos devem ser feitas manualmente e com backup das notas existentes.
+O processo verifica a integridade dos arquivos por **SHA-256**, registra versões instaladas e cria **backups antes de substituir arquivos existentes**. O arquivo local `Musicas/Sistema/Configuracoes.json` e as notas pessoais de álbuns não fazem parte dos arquivos distribuídos e não devem ser substituídos pelo gerenciador.
+
+O fluxo de atualização entre releases já foi testado, mas recomenda-se manter um backup independente do cofre antes de atualizar. Cada release contém os seis módulos e seu `manifest.json`.
 
 ## 📱 Compatibilidade
 
