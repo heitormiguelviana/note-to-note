@@ -1,0 +1,73 @@
+{
+  "familiar": {
+    "keys": [
+      "Candidate 0::Record Candidate 0 0",
+      "Candidate 1::Record Candidate 1 0",
+      "Candidate 2::Record Candidate 2 0",
+      "Candidate 3::Record Candidate 3 0",
+      "Other::Record Other 0",
+      "Seed::Record Seed 0"
+    ],
+    "artists": 6,
+    "tags": 3,
+    "distances": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "elapsedMs": 23.336050000041723,
+    "notices": []
+  },
+  "balanced": {
+    "keys": [
+      "Candidate 0::Record Candidate 0 0",
+      "Candidate 1::Record Candidate 1 0",
+      "Candidate 2::Record Candidate 2 0",
+      "Candidate 3::Record Candidate 3 0",
+      "Other::Record Other 0",
+      "Seed::Record Seed 0"
+    ],
+    "artists": 6,
+    "tags": 3,
+    "distances": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "elapsedMs": 18.87969799991697,
+    "notices": []
+  },
+  "explore": {
+    "keys": [
+      "soul artist 0::soul record 0",
+      "jazz artist 5::jazz record 5",
+      "hardcore artist 1::hardcore record 1",
+      "soul artist 2::soul record 2",
+      "soul artist 1::soul record 1",
+      "soul artist 6::soul record 6"
+    ],
+    "artists": 6,
+    "tags": 0,
+    "distances": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "elapsedMs": 10.9058519997634,
+    "notices": []
+  },
+  "_reference": {
+    "sourceSha256": "9e3960273f56473faf0b908b58e94507cf4a75dd5e00d346af47a7fb555e8ece",
+    "seed": 731,
+    "description": "Beta recebida, antes das melhorias algorítmicas desta etapa"
+  }
+}

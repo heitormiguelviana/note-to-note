@@ -1,6 +1,6 @@
 ```dataviewjs
 // ============================================================
-// 🎲 ROLETA MUSICAL — V1.1 (DEFINITIVA)
+// 🎲 ROLETA MUSICAL — V1.2.0
 // ============================================================
 // V0.43: caminhos e chave Last.fm vindos da Central de Configurações.
 // Modo "Já catalogado": sorteia direto das notas de Musicas/
@@ -2064,11 +2064,11 @@ function describeTime() {
 // VISUAL
 // ============================================================
 
-document.getElementById("roleta-v04-style")?.remove();
+document.getElementById("roleta-v04-visual-beta-style")?.remove();
 
 const style = document.createElement("style");
 
-style.id = "roleta-v04-style";
+style.id = "roleta-v04-visual-beta-style";
 
 style.textContent = `
 .roleta-v04 {
@@ -2097,6 +2097,11 @@ style.textContent = `
 .roleta-modes .roleta-mode.active {background:var(--nt-accent-bg)!important;border-color:var(--nt-accent)!important}
 .roleta-mode-name {font-size:13px;font-weight:750}
 .roleta-mode-desc {font-size:11px;color:var(--nt-muted);line-height:1.4}
+/* Beta 3.1: Obsidian Mobile pode impor white-space:nowrap aos botoes. */
+.roleta-modes .roleta-mode {width:100%;max-width:100%;height:auto;box-sizing:border-box;white-space:normal!important;overflow-wrap:anywhere;word-break:normal}
+.roleta-modes .roleta-mode .roleta-mode-name,
+.roleta-modes .roleta-mode .roleta-mode-desc {display:block;width:100%;max-width:100%;min-width:0;white-space:normal!important;overflow-wrap:anywhere;word-break:normal;text-overflow:clip;}
+
 .roleta-controls {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .roleta-control {display:flex;flex-direction:column;gap:5px;min-width:0}
 .roleta-control label {font-size:10px;letter-spacing:.06em;font-weight:700;color:var(--nt-muted)}
@@ -2182,6 +2187,89 @@ style.textContent = `
 @media(max-width:380px){.roleta-controls{grid-template-columns:1fr}}
 `;
 
+style.textContent += `
+/* V1.2 Beta 3 — navegação em duas etapas e painel adaptativo */
+.roleta-beta-adaptive-status{font-size:12px;color:var(--nt-muted);padding:8px 10px;border:1px solid var(--nt-line);border-radius:6px}
+.roleta-v04.roleta-beta-play {max-width:1100px;width:100%;min-height:72vh}
+.roleta-beta-play .roleta-controls-panel,.roleta-beta-play .roleta-stats,.roleta-beta-play .roleta-hero {display:none!important}
+.roleta-beta-config .roleta-result-panel {display:none!important}
+.roleta-beta-play .roleta-result-panel {flex:1;display:flex;flex-direction:column;gap:16px}
+.roleta-beta-play .roleta-result-panel > .roleta-section-title {display:none}
+.roleta-beta-play .roleta-result-card {align-items:center;gap:25px}
+.roleta-beta-play .roleta-cover {width:min(29vw,310px);height:min(29vw,310px);flex:0 0 min(29vw,310px)}
+.roleta-beta-play .roleta-result-title {font-size:clamp(23px,3vw,35px)}
+.roleta-beta-toolbar {display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.roleta-beta-toolbar-title {font-size:19px;font-weight:750}
+.roleta-beta-toolbar button,.roleta-beta-actions button,.roleta-beta-feedback button {background:transparent!important;color:var(--nt-ink)!important;border:1px solid var(--nt-line)!important;border-radius:6px!important;padding:9px 12px!important;cursor:pointer;font-size:12px!important}
+.roleta-beta-toolbar button:hover,.roleta-beta-actions button:hover,.roleta-beta-feedback button:hover {border-color:var(--nt-accent)!important}
+.roleta-beta-actions {display:flex;gap:9px;flex-wrap:wrap}
+.roleta-beta-actions .roleta-beta-primary {background:var(--nt-accent)!important;color:#101b25!important;border-color:var(--nt-accent)!important;font-weight:750}
+.roleta-beta-actions button:disabled {opacity:.45;cursor:default}
+.roleta-beta-feedback,.roleta-beta-history {border:1px solid var(--nt-line);border-radius:7px;padding:13px;background:var(--nt-bg)}
+.roleta-beta-feedback summary,.roleta-beta-history summary {cursor:pointer;font-size:13px;font-weight:700}
+.roleta-beta-feedback-body {display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.roleta-beta-feedback-note {color:var(--nt-muted);font-size:11px;margin-top:10px}
+.roleta-beta-history-list {display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.roleta-beta-history-item {display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px;border:1px solid var(--nt-line);border-radius:5px}
+.roleta-beta-history-item span {font-size:12px;overflow-wrap:anywhere}
+.roleta-beta-history-item button {background:transparent!important;border:1px solid var(--nt-line)!important;border-radius:4px!important;color:var(--nt-ink)!important;padding:5px 8px!important;cursor:pointer;font-size:11px!important}
+.roleta-beta-session-note {font-size:11px;color:var(--nt-muted)}
+@media(max-width:650px){.roleta-beta-play .roleta-result-card {flex-direction:column;align-items:stretch}.roleta-beta-play .roleta-cover {width:min(75vw,280px);height:min(75vw,280px);flex:0 0 auto}.roleta-beta-actions button {flex:1}}
+
+/* NTN VISUAL — START */
+.roleta-v04.ntn-visual-beta {
+ --ntn-ui-bg:#191d23; --ntn-ui-surface:#22272e; --ntn-ui-raised:#292f38;
+ --ntn-ui-border:#3b4652; --ntn-ui-text:#e9edf0; --ntn-ui-muted:#a6b2bf;
+ --ntn-ui-accent:#9bb6ce; --ntn-ui-selected:#2c3b4a;
+ --ntn-ui-success:#8fc5ad; --ntn-ui-warning:#d9bb82; --ntn-ui-error:#e3a0a0;
+ --ntn-ui-radius:8px; --ntn-ui-control:38px;
+ --ntn-ui-space-1:4px; --ntn-ui-space-2:8px; --ntn-ui-space-3:12px; --ntn-ui-space-4:16px; --ntn-ui-space-5:24px;
+ --nt-bg:var(--ntn-ui-bg); --nt-surface:var(--ntn-ui-surface); --nt-surface-2:var(--ntn-ui-raised);
+ --nt-line:var(--ntn-ui-border); --nt-ink:var(--ntn-ui-text); --nt-muted:var(--ntn-ui-muted);
+ --nt-accent:var(--ntn-ui-accent); --nt-accent-bg:var(--ntn-ui-selected);
+ --ntn-bg:var(--ntn-ui-bg); --ntn-panel:var(--ntn-ui-surface); --ntn-raised:var(--ntn-ui-raised);
+ --ntn-border:var(--ntn-ui-border); --ntn-accent:var(--ntn-ui-accent); --ntn-ink:var(--ntn-ui-text); --ntn-muted:var(--ntn-ui-muted);
+ --nr-bg:var(--ntn-ui-bg); --nr-panel:var(--ntn-ui-surface); --nr-border:var(--ntn-ui-border); --nr-accent:var(--ntn-ui-accent); --nr-muted:var(--ntn-ui-muted);
+ width:100%; max-width:1100px!important; min-width:0; margin:0 auto;
+ color:var(--ntn-ui-text); font-family:var(--font-interface),system-ui,sans-serif;
+ font-size:14px; line-height:1.55; color-scheme:dark;
+}
+.roleta-v04.ntn-visual-beta, .roleta-v04.ntn-visual-beta * {box-sizing:border-box;}
+.roleta-v04.ntn-visual-beta > * {min-width:0;}
+.roleta-v04.ntn-visual-beta button {min-height:var(--ntn-ui-control)!important; max-width:100%; height:auto; white-space:normal!important; overflow-wrap:anywhere;
+ font-family:inherit; font-size:12px!important; font-weight:600; line-height:1.35; padding:8px 12px!important;
+ border-radius:6px!important; border:1px solid var(--ntn-ui-border)!important;
+ background:var(--ntn-ui-surface)!important; color:var(--ntn-ui-text)!important; box-shadow:none!important;
+ touch-action:manipulation;}
+.roleta-v04.ntn-visual-beta button:hover:not(:disabled) {border-color:var(--ntn-ui-accent)!important;}
+.roleta-v04.ntn-visual-beta .roleta-beta-primary, .roleta-v04.ntn-visual-beta button.active, .roleta-v04.ntn-visual-beta button.is-active {background:var(--ntn-ui-selected)!important; border-color:var(--ntn-ui-accent)!important; color:var(--ntn-ui-text)!important;}
+.roleta-v04.ntn-visual-beta button:disabled {opacity:.5; cursor:default;}
+.roleta-v04.ntn-visual-beta :is(button,input,select,textarea,a,summary):focus-visible {outline:2px solid var(--ntn-ui-accent); outline-offset:3px;}
+.roleta-v04.ntn-visual-beta :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea) {
+ min-height:var(--ntn-ui-control); min-width:0; max-width:100%; padding:8px 10px; border-radius:6px!important;
+ background:var(--ntn-ui-bg)!important; color:var(--ntn-ui-text)!important; border:1px solid var(--ntn-ui-border)!important; font-family:inherit; font-size:12px;}
+.roleta-v04.ntn-visual-beta :is(input[type=checkbox],input[type=radio],input[type=range]) {accent-color:var(--ntn-ui-accent);}
+.roleta-v04.ntn-visual-beta .roleta-controls-panel,.roleta-v04.ntn-visual-beta .roleta-beta-feedback,.roleta-v04.ntn-visual-beta .roleta-beta-history {border-radius:var(--ntn-ui-radius)!important; border-color:var(--ntn-ui-border)!important;}
+.roleta-v04.ntn-visual-beta .roleta-title {font-size:clamp(25px,3.5vw,34px); line-height:1.18; letter-spacing:-.035em; font-weight:750; overflow-wrap:anywhere;}
+.roleta-v04.ntn-visual-beta :is(h2,h3) {line-height:1.3; overflow-wrap:anywhere;}
+.roleta-v04.ntn-visual-beta :is(summary,label) {overflow-wrap:anywhere;}
+.roleta-v04.ntn-visual-beta summary {min-height:32px; cursor:pointer;}
+.roleta-v04.ntn-visual-beta :is(table,pre) {max-width:100%;}
+.roleta-v04.ntn-visual-beta pre {white-space:pre-wrap; overflow-wrap:anywhere;}
+.roleta-v04.ntn-visual-beta :is(.stat-value,.mm-stat-value,.music-diary-stat-value) {font-variant-numeric:tabular-nums;}
+@media (max-width:650px) {
+ .roleta-v04.ntn-visual-beta {padding:16px 12px 24px!important;}
+ .roleta-v04.ntn-visual-beta button {min-height:44px!important;}
+ .roleta-v04.ntn-visual-beta :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select) {min-height:42px;}
+}
+@media (prefers-reduced-motion:reduce) {
+ .roleta-v04.ntn-visual-beta *, .roleta-v04.ntn-visual-beta *::before, .roleta-v04.ntn-visual-beta *::after {animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; scroll-behavior:auto!important;}
+}
+.roleta-v04.ntn-visual-beta.roleta-beta-play {max-width:1100px}.roleta-v04.ntn-visual-beta .roleta-beta-actions,.roleta-v04.ntn-visual-beta .roleta-beta-feedback-body {gap:8px}.roleta-v04.ntn-visual-beta .roleta-beta-history-item {border-radius:6px}.roleta-v04.ntn-visual-beta .roleta-beta-history-item span {min-width:0}.roleta-v04.ntn-visual-beta .roleta-result-body {min-width:0}
+@media(max-width:650px) { .roleta-v04.ntn-visual-beta :is(.mc-grid,.mm-diagnostics) {grid-template-columns:repeat(2,minmax(0,1fr));} .roleta-v04.ntn-visual-beta .mc-shell {padding:16px 12px;} }
+@media(max-width:420px) { .roleta-v04.ntn-visual-beta :is(.mc-grid,.mm-diagnostics) {grid-template-columns:1fr;} }
+/* NTN VISUAL — END */
+`;
 document.head.appendChild(style);
 
 
@@ -2193,7 +2281,7 @@ const root = dv.container;
 
 root.innerHTML = "";
 
-const wrapper = root.createDiv({ cls: "roleta-v04" });
+const wrapper = root.createDiv({ cls: "roleta-v04 ntn-visual-beta" });
 
 const hero = wrapper.createDiv({ cls: "roleta-hero" });
 
@@ -2851,6 +2939,236 @@ resultTitle.createDiv({ cls: "roleta-section-title-sub", text: "O álbum sortead
 
 const result = resultPanel.createDiv();
 
+// Beta 2: estado de sessão apenas em memória (não altera filtros persistidos).
+let betaScreen = "config";
+let betaCurrent = null;
+let betaHistory = [];
+let betaBusy = false;
+let betaFeedback = null;
+let betaPreferenceAnchor = null;
+let betaLastDecision = null;
+let betaDrawPreference = null;
+const betaAdaptiveStatus = resultPanel.createDiv({ cls: "roleta-beta-adaptive-status" });
+const betaDiagnostics = resultPanel.createEl("details", { cls: "roleta-beta-feedback" });
+betaDiagnostics.createEl("summary", { text: "Por que este álbum foi sorteado?" });
+const betaDiagnosticsBody = betaDiagnostics.createDiv({ cls: "roleta-beta-feedback-note" });
+const betaToolbar = resultPanel.createDiv({ cls: "roleta-beta-toolbar" });
+betaToolbar.createDiv({ cls: "roleta-beta-toolbar-title", text: "Roleta Musical · Sorteio" });
+const betaBack = betaToolbar.createEl("button", { text: "⚙ Voltar às configurações" });
+const betaActions = resultPanel.createDiv({ cls: "roleta-beta-actions" });
+const betaAgain = betaActions.createEl("button", { cls: "roleta-beta-primary", text: "🎲 Roletar novamente" });
+const betaReset = betaActions.createEl("button", { text: "↺ Reiniciar sessão" });
+const betaFeedbackPanel = resultPanel.createEl("details", { cls: "roleta-beta-feedback" });
+betaFeedbackPanel.createEl("summary", { text: "⚙ Ajustar próximo sorteio" });
+const betaFeedbackBody = betaFeedbackPanel.createDiv({ cls: "roleta-beta-feedback-body" });
+const betaFeedbackNote = betaFeedbackPanel.createDiv({ cls: "roleta-beta-feedback-note" });
+const betaHistoryPanel = resultPanel.createEl("details", { cls: "roleta-beta-history" });
+const betaHistorySummary = betaHistoryPanel.createEl("summary", { text: "Histórico da sessão (0)" });
+const betaHistoryList = betaHistoryPanel.createDiv({ cls: "roleta-beta-history-list" });
+resultPanel.insertBefore(betaToolbar, resultPanel.firstChild);
+resultPanel.insertBefore(result, betaActions);
+
+function betaWorkKey(a) { return `${norm(a?.artists?.[0] || a?.artist || "")}::${norm(stripEdition(a?.name || ""))}`; }
+function betaIds(a) { return [...new Set([a?.id, ...(a?.ids || [])].filter(Boolean))]; }
+function betaAlbumKey(a) { return betaIds(a)[0] ? `spotify:${betaIds(a)[0]}` : betaWorkKey(a); }
+function betaSameAlbum(a,b) {
+  return betaIds(a).some(id => betaIds(b).includes(id)) || betaWorkKey(a) === betaWorkKey(b);
+}
+function betaSetScreen(screen) {
+  betaScreen = screen;
+  wrapper.classList.toggle("roleta-beta-play", screen === "play");
+  wrapper.classList.toggle("roleta-beta-config", screen !== "play");
+  betaToolbar.style.display = screen === "play" ? "" : "none";
+  betaActions.style.display = screen === "play" ? "" : "none";
+  betaFeedbackPanel.style.display = screen === "play" ? "" : "none";
+  betaAdaptiveStatus.style.display = screen === "play" ? "" : "none";
+  betaDiagnostics.style.display = screen === "play" ? "" : "none";
+  betaHistoryPanel.style.display = screen === "play" ? "" : "none";
+  skipButton.style.display = "none";
+}
+function betaRenderHistory() {
+  betaHistorySummary.textContent = `Histórico da sessão (${betaHistory.length})`;
+  betaHistoryList.innerHTML = "";
+  for (let i = betaHistory.length - 1; i >= 0; i--) {
+    const album = betaHistory[i];
+    const item = betaHistoryList.createDiv({ cls: "roleta-beta-history-item" });
+    item.createSpan({ text: `${album.name} — ${album.artist}` });
+    const view = item.createEl("button", { text: "Rever" });
+    view.addEventListener("click", () => {
+      if (betaBusy) return;
+      betaCurrent = album;
+      betaLastDecision = null; betaRenderDiagnostics();
+      betaFeedback = null; betaPreferenceAnchor = null; betaRenderFeedback();
+      renderResult(album);
+    });
+  }
+}
+function betaRecord(album) {
+  betaCurrent = album;
+  betaRenderFeedback();
+  if (!betaHistory.some(a => betaSameAlbum(a,album))) betaHistory.push(album);
+  betaRenderHistory();
+}
+// As tags são evidências aproximadas, não descrições definitivas do som.
+const betaSoundGroups = {
+  energetic: /\b(energetic|upbeat|fast|aggressive|danceable)\b/i,
+  calm: /\b(calm|chill|soft|acoustic|smooth|mellow|relaxing|minimal|slow|easy listening)\b/i,
+  melancholic: /\b(sad|melancholic|melancholy|nostalgic|gloomy)\b/i,
+  dark: /\b(dark|gloom|horror)\b/i,
+  experimental: /\b(experimental|avant garde|abstract|improvisation)\b/i,
+  bright: /\b(happy|uplifting|sunny|joyful|bright)\b/i
+};
+function betaGenreTags(tags) {
+  return tags.filter(t => !Object.values(betaSoundGroups).some(re => re.exec(t)?.[0].toLowerCase() === t.toLowerCase()));
+}
+const betaGenericTags = new Set(["music","albums","favorites","favourite","favorite","seen live","american","english","male vocalists","female vocalists","2020s","2010s","2000s"]);
+function betaTags(album) {
+  const info = genreInfo(album);
+  if (info.state !== "found") return [];
+  return [...new Set(info.tags.map(t => norm(t.key || t.name || "")).filter(t => t && !betaGenericTags.has(t)))].slice(0, 25);
+}
+function betaSoundVector(tags) {
+  return Object.fromEntries(Object.entries(betaSoundGroups).map(([key, re]) => [key, tags.some(t => re.exec(t)?.[0].toLowerCase() === t.toLowerCase()) ? 1 : 0]));
+}
+function betaOverlap(a, b) {
+  if (!a.length || !b.length) return null;
+  const aa = new Set(a), bb = new Set(b);
+  let intersection = 0;
+  for (const t of aa) if (bb.has(t)) intersection++;
+  return intersection / Math.sqrt(aa.size * bb.size);
+}
+function betaSoundSimilarity(a, b) {
+  const aa = betaSoundVector(a), bb = betaSoundVector(b);
+  const activeA = Object.keys(aa).filter(k => aa[k]);
+  const activeB = Object.keys(bb).filter(k => bb[k]);
+  if (!activeA.length || !activeB.length) return null;
+  return betaOverlap(activeA, activeB);
+}
+function betaSimilarity(album, anchor, mode) {
+  const tags = betaTags(album);
+  const reference = anchor.tags;
+  const genre = betaOverlap(betaGenreTags(tags), betaGenreTags(reference));
+  const sound = betaSoundSimilarity(tags, reference);
+  if (mode === "genre") return genre;
+  if (mode === "sound") return sound;
+  if (genre === null && sound === null) return null;
+  if (mode === "both") return genre !== null && sound !== null ? .5 * genre + .5 * sound : (genre ?? sound);
+  return genre !== null && sound !== null ? 0.65 * genre + 0.35 * sound : (genre ?? sound);
+}
+function betaEvidence(album,pref) {
+  const genre = betaSimilarity(album,pref.anchor,"genre"), sound = betaSimilarity(album,pref.anchor,"sound");
+  if (pref.mode === "genre") return genre === null ? "unknown" : "sufficient";
+  if (pref.mode === "sound") return sound === null ? "unknown" : "sufficient";
+  return genre !== null && sound !== null ? "sufficient" : genre !== null || sound !== null ? "partial" : "unknown";
+}
+function betaAffinity(sim) {
+  return sim === null ? "Informações insuficientes" : sim >= .65 ? "Afinidade alta por tags" : sim >= .3 ? "Afinidade moderada por tags" : "Afinidade baixa por tags";
+}
+function betaWeight(album, pref) {
+  if (!pref) return 1;
+  const sim = betaSimilarity(album, pref.anchor, pref.mode);
+  if (sim === null) return .05;
+  const strength = pref.mode === "similar" ? 3.5 : pref.mode === "both" ? 2.2 : 1.7;
+  const evidence = betaEvidence(album,pref);
+  return (evidence === "partial" ? .25 : 1) * Math.max(0.12, Math.min(16, Math.exp((pref.mode === "similar" ? 1 : -1) * strength * sim)));
+}
+function betaPick(candidates, pref = null) {
+  const unseen = candidates.filter(a => !betaHistory.some(h => betaSameAlbum(h,a)));
+  const pool = unseen.length ? unseen : candidates;
+  if (!pool.length) return null;
+  let exploratory = false;
+  let winner;
+  if (!pref) {
+    winner = state.drawMode === "surprise" ? pickSurprise(pool) : pool[Math.floor(Math.random() * pool.length)];
+  } else {
+    const weights = pool.map(a => betaWeight(a, pref));
+    let r = Math.random() * weights.reduce((sum, w) => sum + w, 0);
+    winner = pool[pool.length - 1];
+    for (let i = 0; i < pool.length; i++) if ((r -= weights[i]) <= 0) { winner = pool[i]; break; }
+  }
+  betaLastDecision = { pref, exploratory, winner, poolSize: pool.length,
+    similarity: pref ? betaSimilarity(winner, pref.anchor, pref.mode) : null,
+    evidence: pref ? betaEvidence(winner,pref) : null };
+  return winner;
+}
+function betaRenderDiagnostics() {
+  const d = betaLastDecision;
+  if (!d || !d.winner) {
+    betaDiagnosticsBody.textContent = "Nenhum sorteio concluído nesta sessão.";
+    return;
+  }
+  if (!d.pref) {
+    betaDiagnosticsBody.textContent = `Sorteio livre entre ${d.poolSize} álbuns elegíveis. Nenhuma referência adaptativa foi utilizada.`;
+    return;
+  }
+  const labels = {similar:"Mais parecido",genre:"Outro gênero",sound:"Outra sonoridade",both:"Mudar ambos"};
+  const anchor = d.pref.anchor;
+  const shared = betaTags(d.winner).filter(t => anchor.tags.includes(t));
+  const score = betaAffinity(d.similarity);
+  betaDiagnosticsBody.innerHTML = "";
+  const lines = [
+    `Referência: ${anchor.name} · ${anchor.entry?.artist || "artista desconhecido"}`,
+    `Ajuste utilizado: ${labels[d.pref.mode] || d.pref.mode}`,
+    `Afinidade heurística: ${score}`,
+    `Cobertura: ${d.evidence === "sufficient" ? "evidências na dimensão solicitada" : d.evidence === "partial" ? "evidências parciais; ajuste aproximado" : "fallback por informações insuficientes"}`,
+    "Gênero/estilo e descritores de atmosfera vêm de tags; não há análise de áudio.",
+    `Tags compartilhadas: ${shared.length ? shared.slice(0, 7).join(", ") : "nenhuma identificada"}`,
+    `Tipo de sorteio: ponderado pelo ajuste solicitado`,
+    `Candidatos elegíveis: ${d.poolSize}`
+  ];
+  for (const line of lines) betaDiagnosticsBody.createDiv({ text: line });
+}
+function betaRenderStatus() {
+  betaAdaptiveStatus.textContent = betaFeedback && betaPreferenceAnchor
+    ? `Próximo sorteio: ${betaFeedback} · referência: ${betaPreferenceAnchor.name} (uso único)`
+    : "Sorteio livre · nenhum ajuste pendente";
+}
+function betaRenderFeedback() {
+  betaFeedbackBody.innerHTML = "";
+  const options = [
+    ["similar", "👍 Mais parecido"], ["genre", "↗ Outro gênero"],
+    ["sound", "♫ Outra sonoridade"], ["both", "↗ Mudar ambos"],
+    ["clear", "✕ Limpar preferências"]
+  ];
+  for (const [id, label] of options) {
+    const b = betaFeedbackBody.createEl("button", { text: label + (betaFeedback === id ? " ✓" : "") });
+    b.disabled = betaBusy || (id !== "clear" && !betaCurrent);
+    b.addEventListener("click", () => {
+      if (betaBusy) return;
+      if (id === "clear") {
+        betaFeedback = null; betaPreferenceAnchor = null; betaLastDecision = null;
+      } else if (betaFeedback === id && betaPreferenceAnchor?.key === betaAlbumKey(betaCurrent)) {
+        betaFeedback = null; betaPreferenceAnchor = null;
+      } else {
+        betaFeedback = id;
+        betaPreferenceAnchor = { key: betaAlbumKey(betaCurrent), name: betaCurrent.name, entry: betaCurrent, tags: betaTags(betaCurrent) };
+      }
+      betaRenderFeedback();
+    });
+  }
+  betaFeedbackNote.textContent = betaFeedback
+    ? `Ajuste pendente para “${betaPreferenceAnchor?.name || "álbum"}”. Será aplicado SOMENTE ao clicar em Roletar novamente. Clique na mesma opção para cancelar.`
+    : "Nenhum ajuste pendente. Cada ajuste vale somente para o próximo sorteio. Tags ausentes são tratadas como desconhecidas.";
+  betaRenderStatus();
+}
+function betaPendingPreference() {
+  return betaFeedback && betaPreferenceAnchor
+    ? { mode: betaFeedback, anchor: { ...betaPreferenceAnchor } } : null;
+}
+betaBack.addEventListener("click", () => { if (!betaBusy) betaSetScreen("config"); });
+betaAgain.addEventListener("click", () => { if (!betaBusy) { prepareSpinAudio(); drawAlbum(); } });
+betaReset.addEventListener("click", () => {
+  if (betaBusy) return;
+  betaHistory = []; betaCurrent = null; betaFeedback = null; betaPreferenceAnchor = null; betaLastDecision = null;
+  betaRenderHistory(); betaRenderFeedback(); betaRenderDiagnostics();
+  result.innerHTML = "";
+  result.createDiv({ cls: "roleta-result-empty", text: "Sessão reiniciada. Clique em Roletar novamente para começar." });
+});
+betaRenderFeedback();
+betaRenderDiagnostics();
+betaSetScreen("config");
+
+
 function paintSourceLine() {
   sourceLine.textContent = catalogMode()
     ? "Origem: notas do acervo. Funciona mesmo sem Spotify."
@@ -2945,20 +3263,31 @@ function renderResult(album) {
 
   const cover = card.createDiv({ cls: "roleta-cover" });
 
-  if (album.image) {
+  // A capa da nota pode apontar para um recurso local lento ou indisponível.
+  // Tenta a imagem do Spotify já carregada antes de exibir o placeholder.
+  const fallbackImage = spotifyLibrary.find(a => betaSameAlbum(a,album))?.image || "";
+  const imageCandidates = [...new Set([album.image, fallbackImage].filter(Boolean))];
+  function showCoverCandidate(index) {
+    cover.innerHTML = "";
+    if (index >= imageCandidates.length) { cover.textContent = "💿"; return; }
     const img = document.createElement("img");
-
-    img.src = album.image;
-    img.alt = "";
-    img.onerror = () => {
+    img.alt = `Capa de ${album.name}`;
+    img.decoding = "async";
+    let settled = false;
+    const timeout = setTimeout(() => fail(), 12000);
+    function fail() {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
       img.remove();
-      cover.textContent = "💿";
-    };
-
+      if (cover.isConnected) showCoverCandidate(index + 1);
+    }
+    img.onload = () => { settled = true; clearTimeout(timeout); };
+    img.onerror = fail;
     cover.appendChild(img);
-  } else {
-    cover.textContent = "💿";
+    img.src = imageCandidates[index];
   }
+  showCoverCandidate(0);
 
   const body = card.createDiv({ cls: "roleta-result-body" });
 
@@ -3039,7 +3368,7 @@ function prepareSpinAudio() {
     if (!AudioCtor) return;
     if (!spinAudioContext || spinAudioContext.state === "closed") spinAudioContext = new AudioCtor();
     if (spinAudioContext.state === "suspended") spinAudioContext.resume().catch(() => {});
-  } catch (e) { console.warn("[Roleta V1.1] Áudio indisponível", e); }
+  } catch (e) { console.warn("[Roleta V1.2] Áudio indisponível", e); }
 }
 function spinTone(freq, duration, delay = 0, type = "sine", intensity = 1) {
   if (state.soundMode === "off" || state.soundVolume <= 0 || !wrapper.isConnected) return;
@@ -3056,7 +3385,7 @@ function spinTone(freq, duration, delay = 0, type = "sine", intensity = 1) {
     osc.connect(gain); gain.connect(ctx.destination);
     osc.start(at); osc.stop(at + duration + 0.015);
     osc.onended = () => { osc.disconnect(); gain.disconnect(); };
-  } catch (e) { console.warn("[Roleta V1.1] Falha no som", e); }
+  } catch (e) { console.warn("[Roleta V1.2] Falha no som", e); }
 }
 function playSpinTick(i) {
   if (state.soundMode === "full") {
@@ -3181,6 +3510,15 @@ function pickSurprise(candidates) {
 // ------------------------------------------------------------
 
 async function drawAlbum() {
+  if (betaBusy) return;
+  betaBusy = true;
+  const pendingPreference = betaPendingPreference();
+  betaSetScreen("play");
+  betaDiagnostics.open = false;
+  betaAgain.disabled = true;
+  betaRenderFeedback();
+  betaBack.disabled = true;
+  betaReset.disabled = true;
   drawButton.disabled = true;
   reloadButton.disabled = true;
 
@@ -3235,27 +3573,53 @@ async function drawAlbum() {
 
     const candidates = applyFilters();
 
+    // Busca metadados para a adaptação mesmo quando o filtro manual de gêneros está desligado.
+    // Limite por sorteio para evitar consultas excessivas em bibliotecas grandes.
+    if (pendingPreference && lastfmEnabled()) {
+      const anchors = [pendingPreference.anchor];
+      const missingAnchors = anchors.filter(a => a.entry && betaTags(a.entry).length === 0 && needsGenreFetch(a.entry));
+      const missingCandidates = candidates.filter(a => betaTags(a).length === 0 && needsGenreFetch(a));
+      const queue = [...new Map([...missingAnchors.map(a => a.entry), ...missingCandidates.slice(0, 45)].map(a => [a.key, a])).values()];
+      if (queue.length) {
+        const loading = result.createDiv({ cls: "roleta-loading", text: `🏷️ Preparando similaridades (${queue.length} álbuns)...` });
+        await loadGenres(queue, { onProgress: (done, total) => {
+          if (loading.isConnected) loading.textContent = `🏷️ Preparando similaridades (${done}/${total})...`;
+        }});
+        loading.remove();
+      }
+      if (pendingPreference.anchor.entry) pendingPreference.anchor.tags = betaTags(pendingPreference.anchor.entry);
+    }
+
     if (!candidates.length) {
       renderResult(null);
 
       return;
     }
 
-    const winner = state.drawMode === "surprise"
-      ? pickSurprise(candidates)
-      : candidates[Math.floor(Math.random() * candidates.length)];
+    const winner = betaPick(candidates, pendingPreference);
     await animateDraw(candidates, winner);
     if (wrapper.isConnected) {
       renderResult(winner);
+      betaRecord(winner);
+      betaRenderDiagnostics();
+      // Consome o ajuste somente depois de concluir o sorteio com sucesso.
+      if (pendingPreference) { betaFeedback = null; betaPreferenceAnchor = null; betaRenderFeedback(); }
+      if (pendingPreference && betaLastDecision?.evidence !== "sufficient")
+        betaAdaptiveStatus.textContent = "Ajuste aproximado: cobertura de tags insuficiente. Consulte os detalhes da escolha.";
       playSpinReveal();
     }
   } catch (error) {
-    console.error("[Roleta V1.1]", error);
+    console.error("[Roleta V1.2]", error);
 
     result.innerHTML = "";
 
     result.createDiv({ cls: "roleta-error", text: `Erro: ${error?.message || error}` });
   } finally {
+    betaBusy = false;
+    betaAgain.disabled = false;
+    betaRenderFeedback();
+    betaBack.disabled = false;
+    betaReset.disabled = false;
     drawButton.disabled = false;
     reloadButton.disabled = false;
   }
@@ -3384,6 +3748,8 @@ drawButton.addEventListener("click", () => {
   drawAlbum();
 });
 reloadButton.addEventListener("click", async () => {
+  betaHistory = []; betaCurrent = null; betaFeedback = null; betaPreferenceAnchor = null; betaLastDecision = null;
+  betaRenderHistory(); betaRenderFeedback(); betaSetScreen("config");
   await initialize();
 });
 
