@@ -50,7 +50,7 @@ test('sem tags não inventa diversidade e catálogo extenso respeita limites',as
  const h=await harness();let pool=Array.from({length:1000},(_,i)=>({type:'album',artist:`Artist ${i%100}`,album:`Album ${i}`,discoveryScore:1000-i}));const out=h.diversify(pool,{limit:6,maxPerArtist:1});assert.equal(out.length,6);assert.equal(new Set(out.map(x=>x.artist)).size,6); assert.equal(out[1].artist,'Artist 1');let history=[];h.remember(history,pool);assert.equal(history.length,h.CFG.seenLimit);
 });
 test('arquivo DataviewJS inteiro compila',()=>{
- const md=fs.readFileSync('Central-Beta.md','utf8');assert.doesNotThrow(()=>new AsyncFunction('dv','app',md.replace(/^```dataviewjs\s*/, '').replace(/\s*```\s*$/, '')));
+ const md=fs.readFileSync('betas/Central-Beta.md','utf8');assert.doesNotThrow(()=>new AsyncFunction('dv','app',md.replace(/^```dataviewjs\s*/, '').replace(/\s*```\s*$/, '')));
 });
 
 test('Spotify distingue falha de rede, autenticação e lista vazia',async()=>{

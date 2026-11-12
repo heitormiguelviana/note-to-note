@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
 async function harness(pages = [], feedback = '', options = {}) {
-  const md = fs.readFileSync(process.env.CENTRAL_TEST_FILE || 'Central-Beta.md', 'utf8');
+  const md = fs.readFileSync(process.env.CENTRAL_TEST_FILE || 'betas/Central-Beta.md', 'utf8');
   const source = md.slice(md.indexOf('\n') + 1, md.indexOf('/* ============================================================\n   INTERFACE — CSS')) +
     md.slice(md.indexOf('function personalizedProfile()'), md.indexOf('function renderPersonalized()')) + md.slice(md.indexOf('function manualPreferredType('), md.indexOf('async function runManualSearch('));
   let body = feedback, spotifyItems = [];

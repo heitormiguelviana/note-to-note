@@ -1,5 +1,5 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');
-const md=fs.readFileSync('Roleta-Beta.md','utf8'),stable=fs.readFileSync('betas/backups/pre-padronizacao/oficiais/Roleta.md','utf8');const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+const md=fs.readFileSync('betas/Roleta-Beta.md','utf8'),stable=fs.readFileSync('betas/backups/pre-padronizacao/oficiais/Roleta.md','utf8');const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
 async function harness(saved={},random=()=>.5){
  const prefix=md.slice(md.indexOf('\n')+1,md.indexOf('// ============================================================\n// VISUAL'));
  const key=md.slice(md.indexOf('function betaWorkKey('),md.indexOf('function betaSetScreen('));

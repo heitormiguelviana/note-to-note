@@ -138,13 +138,13 @@ O projeto foi desenvolvido para **Obsidian Desktop e Mobile** com DataviewJS. A 
 ## Código e desenvolvimento
 
 Os seis módulos oficiais da release **v1.3.0** estão em `src/`. Versões individuais,
-melhorias desde a v1.2.1 e compatibilidade estão no [CHANGELOG.md](CHANGELOG.md).
+melhorias desde a v1.2.1 e compatibilidade estão no [CHANGELOG.md](docs/CHANGELOG.md).
 O [manifest.json](manifest.json) registra os arquivos finais e seus hashes; o
 instalador usa esse contrato nos anexos da release, sem baixar betas.
 
-As betas aprovadas foram preservadas em `Central-Beta.md`, `Roleta-Beta.md`,
-`Configuracoes-Beta.md`, `Diario.Musical-Beta.md`, `Monitor-Beta.md` e
-`Relatorio-Beta.md`. Histórico e backups ficam em `betas/`. Cada nota contém seu CSS.
+As betas aprovadas foram preservadas em `betas/Central-Beta.md`, `betas/Roleta-Beta.md`,
+`betas/Configuracoes-Beta.md`, `betas/Diario.Musical-Beta.md`, `betas/Monitor-Beta.md` e
+`betas/Relatorio-Beta.md`. Histórico e backups ficam em `betas/`. Cada nota contém seu CSS.
 Veja o [design system](docs/design-system.md) e o [contexto técnico](contexto.md).
 
 Validação local: `node --test tests/*.test.cjs` e `node tools/release.cjs`.

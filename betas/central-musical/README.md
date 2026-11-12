@@ -1,9 +1,9 @@
 > Os snapshots abaixo são históricos da estabilização. O ativo agora é a beta visual
-> canônica da raiz; veja `docs/promocao-e-padronizacao.md` a partir da raiz.
+> canônica de `betas/`; veja `docs/promocao-e-padronizacao.md` a partir da raiz.
 
 # Versões Beta da Central Musical
 
-`../../Central-Beta.md` é o arquivo de trabalho. Os arquivos deste diretório
+`../Central-Beta.md` é o arquivo de trabalho. Os arquivos deste diretório
 são snapshots imutáveis, sem vínculo com os anexos oficiais de releases ou `src/`.
 A política de snapshots numerados foi solicitada depois da etapa de beta contínua.
 
@@ -16,7 +16,7 @@ A política de snapshots numerados foi solicitada depois da etapa de beta contí
 Para a próxima iteração:
 
 1. Conferir o Git e verificar os hashes existentes antes de alterar o principal.
-2. Trabalhar apenas em `Central-Musical-Beta.md`, mantendo os snapshots anteriores.
+2. Trabalhar apenas em `../Central-Beta.md`, mantendo os snapshots anteriores.
 3. Atualizar o cabeçalho do principal para o próximo número, implementar e testar.
 4. Copiar os bytes finais para `Central-Musical-Beta-N.md` usando criação exclusiva
    (falhar se o destino já existir), após executar a suíte e revisar o escopo.

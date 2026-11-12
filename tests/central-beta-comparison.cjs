@@ -2,7 +2,7 @@
 const {manualScenario}=require('./central-manual-scenarios.cjs');
 (async()=>{
  const report={};
- for(const [label,path] of [['beta1','betas/central-musical/Central-Musical-Beta-1.md'],['beta2','Central-Beta.md']]){
+ for(const [label,path] of [['beta1','betas/central-musical/Central-Musical-Beta-1.md'],['beta2','betas/Central-Beta.md']]){
   process.env.CENTRAL_TEST_FILE=path;report[label]={};
   for(const ref of ['Alfredo','To Pimp a Butterfly']){
    const started=performance.now(),{results}=await manualScenario('album',ref);

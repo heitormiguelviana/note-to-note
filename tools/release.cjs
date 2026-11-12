@@ -15,12 +15,13 @@ for(const c of manifest.components){
  if(c.sizeBytes>250000||(c.id==='configuracoes'&&c.sizeBytes>200000))throw Error('Limite do instalador excedido');
  if(!bytes.toString().startsWith('```dataviewjs'))throw Error('Nota DataviewJS inválida');
 }
-if(!fs.existsSync('CHANGELOG.md'))throw Error('Changelog ausente');
+if(!fs.existsSync('docs/CHANGELOG.md'))throw Error('Changelog ausente');
 if(process.argv[2]==='--output'){
  if(!process.argv[3])throw Error('Informe diretório de saída');
  const output=path.resolve(process.argv[3]);fs.mkdirSync(output,{recursive:true});
  for(const c of manifest.components)fs.copyFileSync(path.join('src',c.source),path.join(output,c.source));
- for(const f of ['manifest.json','CHANGELOG.md'])fs.copyFileSync(f,path.join(output,f));
+ fs.copyFileSync('manifest.json',path.join(output,'manifest.json'));
+ fs.copyFileSync('docs/CHANGELOG.md',path.join(output,'CHANGELOG.md'));
  console.log('Oito assets preparados em '+output);
 }
 console.log('Manifesto e seis módulos válidos para v'+manifest.release);

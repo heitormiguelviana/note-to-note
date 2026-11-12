@@ -5,7 +5,7 @@
 
 # Central Musical — Beta contínua
 
-Arquivo de desenvolvimento: `Central-Musical-Beta.md`. A antiga Beta 3 já continha
+Arquivo ativo atual: `betas/Central-Beta.md` (caminho relativo à raiz do repositório). A antiga Beta 3 já continha
 feedback efetivo por item, média regularizada por artista, validação estrita Spotify,
 exclusões e avisos agregados. Esta etapa continua essa implementação. A chave
 `central-descoberta-v19-beta3-ui` permanece intencionalmente para ler o estado existente.

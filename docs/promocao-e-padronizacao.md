@@ -1,4 +1,4 @@
-> Registro histórico da etapa visual anterior. A promoção final está em CHANGELOG.md
+> Registro histórico da etapa visual anterior. A promoção final está em docs/CHANGELOG.md
 > e manifest.json da raiz, release v1.3.0; o relato abaixo foi preservado como auditoria.
 
 # Promoção local e padronização visual
@@ -14,12 +14,12 @@ embutido no Configurador com esse manifesto de distribuição.
 
 | ID | Asset / fonte local | Destino no cofre | Versão publicada consultada | Oficial local após promoção | Beta visual ativa |
 |---|---|---|---|---|---|
-| central | src/Central.md | Central.md | 1.8 | 1.9 | Central-Beta.md |
-| roleta | src/Roleta.md | Roleta.md | 1.1 | 1.2 | Roleta-Beta.md |
-| configuracoes | src/Configuracoes.md | Musicas/Sistema/Configurações.md | 2.5.0 | 2.5.0 | Configuracoes-Beta.md |
-| diario | src/Diario.Musical.md | Diário Musical.md | 1.3.1 | 1.3.1 | Diario.Musical-Beta.md |
-| monitor | src/Monitor.md | Monitor.md | 1.30 | 1.30 | Monitor-Beta.md |
-| relatorio | src/Relatorio.md | Relatório.md | 3.6.1 | 3.6.1 | Relatorio-Beta.md |
+| central | src/Central.md | Central.md | 1.8 | 1.9 | betas/Central-Beta.md |
+| roleta | src/Roleta.md | Roleta.md | 1.1 | 1.2 | betas/Roleta-Beta.md |
+| configuracoes | src/Configuracoes.md | Musicas/Sistema/Configurações.md | 2.5.0 | 2.5.0 | betas/Configuracoes-Beta.md |
+| diario | src/Diario.Musical.md | Diário Musical.md | 1.3.1 | 1.3.1 | betas/Diario.Musical-Beta.md |
+| monitor | src/Monitor.md | Monitor.md | 1.30 | 1.30 | betas/Monitor-Beta.md |
+| relatorio | src/Relatorio.md | Relatório.md | 3.6.1 | 3.6.1 | betas/Relatorio-Beta.md |
 
 O gerenciador valida exatamente esses seis nomes/destinos; o bootstrap instala apenas
 Configurações. Nenhuma inconsistência de nomes foi encontrada. A diferença entre código
@@ -41,7 +41,7 @@ mantidos. “Experimental” como classificação musical continua válido; o r�
 ajuste experimental da interface da Roleta foi retirado. Persistência e algoritmos
 não mudaram. Os outros quatro oficiais são idênticos aos backups.
 
-Os antigos ativos da raiz deram lugar aos seis nomes canônicos acima. Testes foram
+Os antigos ativos de desenvolvimento deram lugar aos seis nomes canônicos acima. Testes foram
 atualizados para os novos caminhos; testes de snapshots continuam verificando os
 bytes históricos nos backups, sem esperar que um design novo seja idêntico à beta
 algorítmica antiga. Nenhum novo sistema paralelo de snapshots foi criado.

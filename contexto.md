@@ -18,7 +18,7 @@ A base publicada anterior foi conferida por `releases/latest`: v1.2.1, publicada
 em 29/10/2026 UTC, Central 1.8/Roleta 1.1. Seu manifesto permanece como referência
 histórica em `docs/references/manifest-v1.2.1.json`. Consulte a API antes de afirmar
 qual é a última release remota. Versão geral, versão individual e chave de estado
-persistido são conceitos diferentes. Consulte [CHANGELOG.md](CHANGELOG.md).
+persistido são conceitos diferentes. Consulte [CHANGELOG.md](docs/CHANGELOG.md).
 
 ## 2. Visão geral e ambiente de execução
 
@@ -42,17 +42,15 @@ dos plugins, às permissões e às APIs disponíveis em cada dispositivo.
 
 ```text
 note-to-note/
-├── README.md, contexto.md, CHANGELOG.md
+├── README.md, contexto.md
 ├── Instalador.md, manifest.json
 ├── src/
 │   ├── Central.md, Configuracoes.md, Diario.Musical.md
 │   └── Monitor.md, Relatorio.md, Roleta.md
-├── Central-Beta.md, Configuracoes-Beta.md, Diario.Musical-Beta.md
-├── Monitor-Beta.md, Relatorio-Beta.md, Roleta-Beta.md
-├── betas/                  # snapshots e backups imutáveis
+├── betas/                  # seis Betas ativas, snapshots e backups imutáveis
 ├── tests/                  # lógica, sintaxe e contratos com mocks
 ├── tools/                  # preparo e validação da distribuição
-└── docs/                   # design system, validação e referências
+└── docs/                   # CHANGELOG.md, design system, validação e referências
 ```
 
 `src/` representa o código-fonte versionado. Sua inclusão não muda a origem dos
@@ -474,7 +472,7 @@ etapas; Diário é catálogo, Monitor é diagnóstico, Relatório é análise e 
 O prefixo técnico `ntn-visual-beta` e IDs de CSS herdados permanecem intencionalmente
 mesmo no oficial para não alterar o visual aprovado; não são rótulos exibidos.
 
-As seis betas ativas da raiz mantêm os nomes canônicos acrescidos de `-Beta.md`.
+As seis betas ativas em `betas/` mantêm os nomes canônicos acrescidos de `-Beta.md`.
 Snapshots/versões antigas ficam em `betas/central-musical` e `betas/roleta-musical`.
 Backups `pre-padronizacao` preservam os módulos da v1.2.1 publicada; backups
 `pre-release-v1.3.0` preservam os oficiais locais anteriores a esta promoção visual.

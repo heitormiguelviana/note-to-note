@@ -1,9 +1,9 @@
 > Os snapshots abaixo são históricos da estabilização. O ativo agora é a beta visual
-> canônica da raiz; veja `docs/promocao-e-padronizacao.md` a partir da raiz.
+> canônica de `betas/`; veja `docs/promocao-e-padronizacao.md` a partir da raiz.
 
 # Roleta Musical V1.2 — Betas
 
-Arquivo ativo: `../../Roleta-Beta.md` (Beta 4).
+Arquivo ativo: `../Roleta-Beta.md` (Beta 4).
 
 - `Roleta-Musical-V1.2-Beta3.md`: snapshot exato do arquivo recebido como
   `Roleta-Musical-V1.2-Beta3.1.md`. O cabeçalho 3.1 foi preservado nos bytes históricos.
