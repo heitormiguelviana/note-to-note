@@ -8,18 +8,17 @@ Leia-o antes de alterações significativas e consulte o [README](README.md) par
 instalação e orientações ao usuário. Informações técnicas abaixo foram conferidas
 no README, no bootstrap, no manifesto e nos seis anexos da release estável.
 
-Referência verificada em **11/11/2026** pelo endpoint GitHub
-`/repos/heitormiguelviana/note-to-note/releases/latest`:
-**[v1.2.1](https://github.com/heitormiguelviana/note-to-note/releases/tag/v1.2.1)**,
-sem os indicadores `draft` ou `prerelease`, publicada em **28/10/2026 às
-21:13:56 de Brasília** (`2026-10-29T00:13:56Z`). Esta é uma referência datada;
-consulte novamente o GitHub antes de afirmar qual é a versão estável mais recente.
+Referência de código desta revisão: **Note to Note v1.3.0 — Padronização Visual**.
+O `manifest.json` versionado na raiz identifica os seis módulos oficiais em `src/`,
+seus destinos, versões, bytes e SHA-256. O instalador continua consumindo uma cópia
+desse manifesto anexada à release do GitHub, sem ler o checkout. A promoção da
+padronização visual foi aprovada pelo mantenedor; não há novo ciclo de redesign.
 
-O manifesto original pode ser consultado em
-[manifest.json da v1.2.1](https://github.com/heitormiguelviana/note-to-note/releases/download/v1.2.1/manifest.json).
-Ele declara `schemaVersion: 1`, projeto `Note to Note`, release `1.2.1` e canal
-`stable`. Versão do sistema, versão de cada módulo, versão de um gerenciador
-interno e sufixos de chaves de armazenamento não são a mesma coisa.
+A base publicada anterior foi conferida por `releases/latest`: v1.2.1, publicada
+em 29/10/2026 UTC, Central 1.8/Roleta 1.1. Seu manifesto permanece como referência
+histórica em `docs/references/manifest-v1.2.1.json`. Consulte a API antes de afirmar
+qual é a última release remota. Versão geral, versão individual e chave de estado
+persistido são conceitos diferentes. Consulte [CHANGELOG.md](CHANGELOG.md).
 
 ## 2. Visão geral e ambiente de execução
 
@@ -43,16 +42,17 @@ dos plugins, às permissões e às APIs disponíveis em cada dispositivo.
 
 ```text
 note-to-note/
-├── README.md               # apresentação, instalação e distribuição
-├── Instalador.md           # bootstrap; instala somente a Central de Configurações
-├── contexto.md             # referência técnica e regras de desenvolvimento
-└── src/                    # cópias versionadas dos seis anexos estáveis
-    ├── Central.md
-    ├── Configuracoes.md
-    ├── Diario.Musical.md
-    ├── Monitor.md
-    ├── Relatorio.md
-    └── Roleta.md
+├── README.md, contexto.md, CHANGELOG.md
+├── Instalador.md, manifest.json
+├── src/
+│   ├── Central.md, Configuracoes.md, Diario.Musical.md
+│   └── Monitor.md, Relatorio.md, Roleta.md
+├── Central-Beta.md, Configuracoes-Beta.md, Diario.Musical-Beta.md
+├── Monitor-Beta.md, Relatorio-Beta.md, Roleta-Beta.md
+├── betas/                  # snapshots e backups imutáveis
+├── tests/                  # lógica, sintaxe e contratos com mocks
+├── tools/                  # preparo e validação da distribuição
+└── docs/                   # design system, validação e referências
 ```
 
 `src/` representa o código-fonte versionado. Sua inclusão não muda a origem dos
@@ -60,16 +60,16 @@ downloads: o bootstrap e o gerenciador continuam consumindo **anexos de GitHub
 Releases**, sem ler `src/`. Alterar um arquivo nessa pasta não atualiza
 automaticamente os cofres dos usuários nem publica uma release.
 
-### Mapeamento do manifesto da v1.2.1
+### Mapeamento do manifesto da v1.3.0
 
 | Arquivo distribuído e versionado em `src/` | Módulo | Versão | Nota instalada, relativa ao cofre |
 | --- | --- | --- | --- |
-| `Configuracoes.md` | Central de Configurações | 2.5.0 | `Musicas/Sistema/Configurações.md` |
-| `Central.md` | Central de Descoberta Musical | 1.8 | `Central.md` |
-| `Diario.Musical.md` | Diário Musical | 1.3.1 | `Diário Musical.md` |
-| `Monitor.md` | Monitor Last.fm → MediaDB | 1.30 | `Monitor.md` |
-| `Roleta.md` | Roleta Musical | 1.1 | `Roleta.md` |
-| `Relatorio.md` | Relatório Musical | 3.6.1 | `Relatório.md` |
+| `Configuracoes.md` | Central de Configurações | 2.6.0 | `Musicas/Sistema/Configurações.md` |
+| `Central.md` | Central de Descoberta Musical | 1.9.0 | `Central.md` |
+| `Diario.Musical.md` | Diário Musical | 1.4.0 | `Diário Musical.md` |
+| `Monitor.md` | Monitor Last.fm → MediaDB | 1.31.0 | `Monitor.md` |
+| `Roleta.md` | Roleta Musical | 1.2.0 | `Roleta.md` |
+| `Relatorio.md` | Relatório Musical | 3.7.0 | `Relatório.md` |
 
 Preserve os nomes dos anexos, inclusive pontos, ausência de acentos e caixa.
 Os nomes das notas instaladas são outro contrato. No manifesto, apenas
@@ -125,13 +125,26 @@ O catálogo e a biblioteca Spotify são utilizados para excluir itens já possu�
 com normalização de edições equivalentes em partes do pipeline. Feedback em
 Markdown participa das preferências; curtidos são uma coleção própria em JSON.
 
-Na 1.8, **Já conheço** registra familiaridade com artistas, álbuns e faixas, pode
+Desde a 1.8, **Já conheço** registra familiaridade com artistas, álbuns e faixas, pode
 ser pesquisado e desfeito e evita novas recomendações correspondentes, incluindo
 tratamento de edições equivalentes de álbuns. Não exige catalogação no MediaDB
 nem salvamento no Spotify. Não é curtida, feedback negativo ou bloqueio de
 artistas semelhantes. `knownItems` pertence ao estado em `localStorage`, separado
 da coleção de curtidos e do arquivo de feedback. A release informa expressamente
 que não há sincronização automática dessas marcações entre dispositivos.
+
+Na 1.9.0, configuração/resultados são etapas separadas e os modos Familiar,
+Equilibrado e Exploratório possuem prioridades distintas. Referências homogêneas
+na busca manual retornam o mesmo tipo; mistas admitem complemento. O perfil usa
+avaliações regularizadas por artista e sinais por álbum, Curtidos e feedback efetivo.
+Tags úteis/Last.fm são aproximações, não descritores de áudio verificados. O histórico
+exclui repetições; posse e bloqueios continuam regras independentes do modo.
+Feedback repetido não acumula preferências; nota do Diário domina feedback fraco.
+Resolução Spotify valida artista/título/edição e rejeita ambiguidades, separando
+rejeição normal de falha de API. Pode haver menos de seis resultados com evidência.
+DEBUG vem desativado e expõe contadores/proveniência sem credenciais. Estado usa
+`central-descoberta-v19-beta3-ui`, lê o legado beta e `central-descoberta-v12` como
+fallback, sem apagar a chave antiga. JSON de Curtidos e feedback Markdown não mudam.
 
 ### 4.3. Diário Musical — `src/Diario.Musical.md`
 
@@ -198,6 +211,16 @@ movimento reduzido e quantidade de candidatos. O modo Surpresa usa ponderação
 moderada por raridade de artista/gênero sem excluir candidatos nessa etapa;
 gênero desconhecido não deve ser transformado em gênero raro. Preserve seleção,
 filtros e estados de erro ao alterar apresentação.
+
+Na 1.2.0, a Roleta separa configuração/resultado, mantém histórico consultável
+apenas na sessão e oferece ajustes para o próximo sorteio concluído. Mais parecido,
+Outro gênero, Outra sonoridade e Mudar ambos usam relações de tags com dimensões
+separadas e ponderação probabilística; nenhum ajuste é ignorado por exploração
+aleatória. Evidências parciais/desconhecidas recebem prioridade menor, mas continuam
+elegíveis. Diagnóstico usa categorias de afinidade, sem alegar medição objetiva de
+áudio. IDs/edições equivalentes ajudam a evitar repetição até esgotar os elegíveis.
+Reiniciar sessão não altera o catálogo ou preferências persistidas. Filtros, Surpresa,
+áudio, animação, pular, caches e a chave `roleta-albuns-v03` permanecem compatíveis.
 
 ### 4.6. Relatório Musical — `src/Relatorio.md`
 
@@ -349,16 +372,18 @@ O README determina publicar **os seis Markdown e `manifest.json` como anexos
 individuais**, com nomes exatos e tamanho/SHA-256 calculados dos bytes finais.
 ZIP é opcional e não os substitui. Mudanças de quebras de linha alteram hashes.
 
-Nesta base não há scripts de build, gerador de manifesto, package manager,
-suíte de testes ou workflow de publicação versionados. Portanto, não há
-automação de publicação comprovada pelo repositório: preparação de anexos,
-recálculo do manifesto e criação da release permanecem etapas a serem executadas
-ou verificadas pelo mantenedor. Não invente um pipeline externo. Uma mudança em
-`src/` ou um merge não publica assets automaticamente.
+O preparo é reproduzível com `node tools/release.cjs --output <diretório>`.
+Valida nomes/destinos no contrato histórico, versões e bytes finais, copiando apenas
+os seis oficiais, manifesto e changelog. `tools/release-source.cjs` registra a
+transformação de apresentação/versionamento das betas aprovadas. Os testes rodam
+com `node --test tests/*.test.cjs`, sem dependências novas. Testes com mocks não
+validam Obsidian real. Publicar continua sendo operação explícita autorizada,
+após PR/merge; não existe atualização automática do cofre a partir do Git.
 
 ## 7. Estado estável, limites e validação desta organização
 
-A referência deste documento é exclusivamente a v1.2.1 e as versões da tabela.
+Os hashes abaixo registram a origem histórica da v1.2.1, não os assets atuais.
+A referência atual é o manifesto da raiz, para v1.3.0.
 O changelog destaca Já conheço na Descoberta 1.8 e a experiência animada da
 Roleta 1.1; os demais módulos mantêm versões anteriores. Comentários históricos
 dentro do código podem mencionar versões mais antigas; não os use isoladamente
@@ -438,3 +463,26 @@ e inspeção do diff comprovam o escopo sem exigir Obsidian. Para mudanças
 funcionais, estabeleça cenários representativos e de erro, compare com a base e
 teste no Obsidian Desktop/Mobile quando necessário. Mocks ou análise estática
 devem ser identificados como tais, e limitações de validação sempre declaradas.
+
+## 10. Visual, organização e versionamento atuais
+
+A padronização aprovada foi incorporada aos seis oficiais. Tokens, hierarquia,
+componentes, foco, responsividade e particularidades estão em `docs/design-system.md`.
+Cada módulo contém seu CSS isolado, sem dependência global. A Central/Roleta mantêm
+etapas; Diário é catálogo, Monitor é diagnóstico, Relatório é análise e Configurações
+é administração. Cálculos, dados e integrações dos quatro últimos não mudaram.
+O prefixo técnico `ntn-visual-beta` e IDs de CSS herdados permanecem intencionalmente
+mesmo no oficial para não alterar o visual aprovado; não são rótulos exibidos.
+
+As seis betas ativas da raiz mantêm os nomes canônicos acrescidos de `-Beta.md`.
+Snapshots/versões antigas ficam em `betas/central-musical` e `betas/roleta-musical`.
+Backups `pre-padronizacao` preservam os módulos da v1.2.1 publicada; backups
+`pre-release-v1.3.0` preservam os oficiais locais anteriores a esta promoção visual.
+Todos têm índices de integridade. Não editar snapshots antigos. Branches de trabalho
+são temporárias; não existe branch dev permanente. Uma tag geral `vMAJOR.MINOR.PATCH`
+identifica a release; versões dos módulos são independentes no manifesto/changelog.
+
+A evolução visual significativa justifica incrementos MINOR compatíveis. Estado,
+cache e formatos não mudam só para acompanhar versão. A aprovação visual do
+mantenedor não transforma testes automatizados em testes de execução no Obsidian.
+Não foram usados cofres/credenciais musicais pessoais na preparação desta release.

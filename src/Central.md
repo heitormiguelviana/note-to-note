@@ -1,6 +1,6 @@
 ```dataviewjs
 /* ============================================================
-   CENTRAL DE DESCOBERTA MUSICAL — V1.8 (EDITORIAL · EXPLORAÇÃO REVISADA)
+   CENTRAL MUSICAL — V1.9.0
 
    FLUXO:  FONTES → CANDIDATOS → NORMALIZAÇÃO → EXCLUSÕES
            → PONTUAÇÃO → DIVERSIDADE → SPOTIFY → RESULTADOS
@@ -15,6 +15,7 @@
    CONFIGURAÇÃO
    ============================================================ */
 const CFG = {
+  debug: false, // Ative para consultar window.noteToNoteCentralDebug após uma busca.
   root: "Musicas",
   central: "Musicas/Central",
   feedback: "Musicas/Central/Feedback.md",
@@ -24,7 +25,10 @@ const CFG = {
   lastfmUser: "",
   lastfmURL: "https://ws.audioscrobbler.com/2.0/",
 
-  stateKey: "central-descoberta-v12",
+  // Beta 3: estado independente. Importa a Beta 2 Revisada sem alterar seus dados.
+  stateKey: "central-descoberta-v19-beta3-ui",
+  legacyStateKey: "central-descoberta-v19-beta2-revisada",
+  fallbackStateKey: "central-descoberta-v12",
 
   lastfmDelay: 90,
   cacheTTL: 1000 * 60 * 60 * 6,
@@ -105,25 +109,33 @@ const DEFAULT_STATE = {
   knownItems: [],
   personalizedSeen: [],
   recommendationSection: "",
-  recommendations: []
+  recommendations: [],
+  resultsView: false
 };
 
 function loadState() {
   try {
-    const raw = localStorage.getItem(CFG.stateKey);
+    const raw = localStorage.getItem(CFG.stateKey) ?? localStorage.getItem(CFG.legacyStateKey) ?? localStorage.getItem(CFG.fallbackStateKey);
     if (!raw) return structuredClone(DEFAULT_STATE);
     const p = JSON.parse(raw);
+    if (!p || typeof p !== "object" || Array.isArray(p)) return structuredClone(DEFAULT_STATE);
     const s = { ...structuredClone(DEFAULT_STATE), ...p };
     s.manualFilters = { ...DEFAULT_FILTERS, ...(p.manualFilters || {}) };
+    // Valida primeiro os dados persistidos: uma lista corrompida não deve
+    // descartar Curtidos/Conhecidos e as demais configurações.
+    for (const k of ["manualResults", "manualSelected", "manualSeen", "personalizedSeen", "recommendations"]) {
+      if (!Array.isArray(s[k])) s[k] = [];
+    }
     if (s.section === "automatic") s.section = "personalized";
     if (!["manual", "personalized", "liked", "known"].includes(s.section)) s.section = "personalized";
     if (s.recommendationSection === "automatic") s.recommendationSection = "personalized";
     if (Array.isArray(p.autoSeen) && p.autoSeen.length) s.personalizedSeen = [...new Set([...(Array.isArray(p.personalizedSeen) ? p.personalizedSeen : []), ...p.autoSeen])].slice(-CFG.seenLimit);
     if (!s.recommendationSection && s.recommendations.length) s.recommendationSection = s.section;
+    // Nunca entrar na tela de resultados com dados vazios ou de outra seção.
+    s.resultsView = s.resultsView === true && s.recommendations.length > 0 &&
+      ["manual", "personalized"].includes(s.recommendationSection) &&
+      s.recommendationSection === s.section;
     if (!["familiar", "balanced", "explore"].includes(s.personalizedMode)) s.personalizedMode = "balanced";
-    for (const k of ["manualResults", "manualSelected", "manualSeen", "personalizedSeen", "recommendations"]) {
-      if (!Array.isArray(s[k])) s[k] = [];
-    }
     s.knownItems = Array.isArray(p.knownItems) ? p.knownItems.filter(i => i && ["album", "artist", "track"].includes(i.type) && typeof i.artist === "string" && i.artist.trim() && (i.type === "artist" || (i.type === "album" ? typeof i.album === "string" && i.album.trim() : typeof i.track === "string" && i.track.trim()))).slice(-5000) : [];
     if (!["album", "artist", "track"].includes(s.knownCategory)) s.knownCategory = "album";
     return s;
@@ -133,6 +145,8 @@ function loadState() {
 }
 
 let state = loadState();
+let discoveryFocusKey = null; // Somente UI, não persistido no cofre
+
 
 /* CURTIDOS V1.7 — artistas, álbuns e músicas. Lê o formato V1.6 sem migrar manualmente. */
 let likedAlbums = [];
@@ -279,7 +293,16 @@ async function parallel(items, worker, concurrency = CFG.concurrency) {
       const i = index++;
       if (i >= items.length) return;
       try { results[i] = await worker(items[i], i); }
-      catch (e) { console.error(e); results[i] = null; }
+      catch (e) {
+        results[i] = null;
+        if (!e?.centralApiFailure) {
+          countDiagnostic("unexpectedWorkerErrors");
+          if (CFG.debug) {
+            if (!diagnostics.workerErrors) diagnostics.workerErrors = [];
+            if (diagnostics.workerErrors.length < 20) diagnostics.workerErrors.push({index:i, errorType:["TypeError","ReferenceError","RangeError","SyntaxError"].includes(e?.name) ? e.name : "Error"});
+          }
+        }
+      }
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, runner));
@@ -379,6 +402,7 @@ function dedupe(items) {
     const k = candidateKey(item);
     if (!k) continue;
     const old = map.get(k);
+    if (old) countDiagnostic("duplicates");
     if (!old || (item.discoveryScore || item.score || 0) > (old.discoveryScore || old.score || 0)) {
       map.set(k, item);
     }
@@ -389,7 +413,7 @@ function dedupe(items) {
 function remember(target, items) {
   for (const item of items) {
     const k = candidateKey(item);
-    if (k && !target.includes(k)) target.push(k);
+    if (k) { const old = target.indexOf(k); if (old >= 0) target.splice(old, 1); target.push(k); }
   }
   while (target.length > CFG.seenLimit) target.shift();
 }
@@ -434,7 +458,7 @@ function markKnown(item) {
   state.recommendations = state.recommendations.filter(candidate => !isKnown(candidate));
   saveState();
   render();
-  notice(`Marcado como já conhecido: ${item.album || item.track || item.artist}`);
+  notice(`Marcado como já conhecido: ${item.type === "track" ? item.track : item.type === "album" ? item.album : item.artist}`);
 }
 function unmarkKnown(item) {
   const key = knownKey(item);
@@ -446,27 +470,70 @@ function unmarkKnown(item) {
 /* ============================================================
    LAST.FM
    ============================================================ */
+// Diagnósticos agregados por busca, sem armazenar URLs, respostas ou credenciais.
+let apiIssues = new Set();
+let diagnostics = { counts: {}, started: Date.now() };
+function countDiagnostic(key, amount = 1) {
+  diagnostics.counts[key] = (diagnostics.counts[key] || 0) + amount;
+}
+function beginDiagnostics() { apiIssues = new Set(); diagnostics = { counts: {}, started: Date.now() }; }
+function finishDiagnostics(items = []) {
+  diagnostics.final = items.length;
+  diagnostics.artists = new Set(items.map(i => norm(i.artist))).size;
+  diagnostics.tagged = items.filter(i => musicalTags(i.tags).length).length;
+  diagnostics.distinctTags = new Set(items.flatMap(i => musicalTags(i.tags))).size;
+  diagnostics.apiFailures = [...apiIssues];
+  diagnostics.elapsedMs = Date.now() - diagnostics.started;
+  if (CFG.debug) {
+    diagnostics.selection = items.map(i => ({ key: candidateKey(i), score: i.discoveryScore, components: i.scoreComponents, distance: i.distance }));
+    window.noteToNoteCentralDebug = structuredClone(diagnostics);
+    console.debug("Central Musical", window.noteToNoteCentralDebug);
+  }
+}
+function apiIssue(service, kind) { apiIssues.add(`${service}: ${kind}`); countDiagnostic("apiFailures"); }
+function reportApiIssues(delivered = 0) {
+  const unexpected = diagnostics.counts.unexpectedWorkerErrors || 0;
+  if (!apiIssues.size && !(unexpected && delivered < CFG.results)) return;
+  const issues = [...apiIssues];
+  if (unexpected && delivered < CFG.results) issues.push("erro interno em parte da busca; consulte DEBUG");
+  const outcome = delivered > 0 ? `${delivered} recomendações entregues; houve falhas em parte das consultas` : "Não foi possível concluir as consultas";
+  notice(`${outcome} (${issues.join(", ")}). Tente novamente.`, 7000);
+}
+function apiFailure(service, error) {
+  const status = Number(error?.status || error?.statusCode || 0);
+  const kind = status === 401 || status === 403 ? "autenticação" : status === 429 ? "limite de requisições" :
+    error?.kind || (status ? `HTTP ${status}` : "rede ou serviço indisponível");
+  apiIssue(service, kind);
+  const failure = new Error(`${service}: ${kind}.`);
+  failure.centralApiFailure = true;
+  return failure;
+}
 const lastfmCache = new Map();
 async function lastfm(method, params = {}) {
-  if (!CFG.lastfmKey) throw new Error("Configure sua chave do Last.fm na Central de Configurações.");
+  if (!CFG.lastfmKey) { apiIssue("Last.fm", "autenticação"); throw new Error("Configure sua chave do Last.fm na Central de Configurações."); }
   const query = new URLSearchParams({ method, api_key: CFG.lastfmKey, format: "json", ...params });
   const cacheKey = query.toString();
   const cached = lastfmCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CFG.cacheTTL) return cached.promise;
+  if (cached && Date.now() - cached.at < CFG.cacheTTL) { countDiagnostic("lastfmCacheHits"); return cached.promise; }
   if (cached) lastfmCache.delete(cacheKey);
   const request = (async () => {
     const signal = typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(15000) : undefined;
+    countDiagnostic("lastfmRequests");
     const response = await fetch(`${CFG.lastfmURL}?${query}`, signal ? { signal } : {});
-    if (!response.ok) throw new Error(`Last.fm HTTP ${response.status}`);
-    const data = await response.json();
-    if (data.error) throw new Error(data.message || "Erro do Last.fm.");
+    if (!response.ok) throw { status: response.status };
+    let data;
+    try { data = await response.json(); } catch { throw { kind: "resposta inválida" }; }
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw { kind: "resposta inválida" };
+    if (data.error) throw { status: [4, 9, 10, 26].includes(Number(data.error)) ? 401 : Number(data.error) === 29 ? 429 : 0, kind: "erro da API" };
+    const expected = { "artist.getSimilar":"similarartists", "track.getSimilar":"similartracks", "artist.getTopAlbums":"topalbums", "tag.getTopAlbums":"albums", "tag.getTopArtists":"topartists", "tag.getTopTracks":"tracks", "album.getInfo":"album", "track.getTopTags":"toptags", "artist.getTopTags":"toptags", "artist.search":"results", "album.search":"results", "track.search":"results" }[method];
+    if (expected && !(expected in data)) throw { kind: "resposta inválida" };
     await sleep(CFG.lastfmDelay);
     return data;
   })();
   lastfmCache.set(cacheKey, { at: Date.now(), promise: request });
   if (lastfmCache.size > CFG.cacheMax) lastfmCache.delete(lastfmCache.keys().next().value);
   try { return await request; }
-  catch (error) { lastfmCache.delete(cacheKey); throw error; }
+  catch (error) { lastfmCache.delete(cacheKey); throw apiFailure("Last.fm", error); }
 }
 
 /* Last.fm NÃO possui "tag.search". Para gênero/tag usamos:
@@ -591,6 +658,10 @@ async function albumDetails(artist, album) {
   try {
     const data = await lastfm("album.getInfo", { artist, album, autocorrect: 1 });
     const info = data?.album || {};
+    if (norm(info.artist) !== norm(artist) || albumBaseTitle(info.name) !== albumBaseTitle(album)) {
+      countDiagnostic("lastfmMetadataMismatch");
+      return { genre: "", tags: [], year: null, durationMinutes: null };
+    }
 
     const tags = list(info?.tags?.tag)
       .map(t => text(t?.name ?? t))
@@ -622,17 +693,20 @@ function getSpotify() { return window.spotifysdk || null; }
 
 async function spotifySearch(query, types) {
   const sdk = getSpotify();
-  if (!sdk) return {};
+  if (!sdk) { apiIssue("Spotify", "autenticação"); throw new Error("Spotify API não conectado."); }
   try {
-    try {
-      return (await sdk.search(query, types)) || {};
-    } catch {
-      return (await sdk.search(query, Array.isArray(types) ? types[0] : types)) || {};
+    let response;
+    try { countDiagnostic("spotifyRequests"); response = await sdk.search(query, types); }
+    catch (error) {
+      // Compatibilidade apenas com SDKs que rejeitam o formato de argumento.
+      if (!(error instanceof TypeError)) throw error;
+      countDiagnostic("spotifyRequests");
+      response = await sdk.search(query, Array.isArray(types) ? types[0] : types);
     }
-  } catch (e) {
-    console.error("Spotify search:", e);
-    return {};
-  }
+    const field = Array.isArray(types) ? `${types[0]}s` : `${types}s`;
+    if (!response || !Array.isArray(response[field]?.items)) throw { kind: "resposta inválida" };
+    return response;
+  } catch (error) { throw apiFailure("Spotify", error); }
 }
 
 const spotifySearchAlbums = async q => (await spotifySearch(q, ["album"]))?.albums?.items || [];
@@ -653,9 +727,11 @@ async function getSpotifySavedAlbums() {
     let offset = 0;
     const limit = 50;
     while (true) {
+      countDiagnostic("spotifyRequests");
       const response = await sdk.makeRequest("GET", `me/albums?limit=${limit}&offset=${offset}`);
       const body = Array.isArray(response) ? response : (response?.body ?? response?.data ?? response);
-      const items = body?.items || [];
+      if (!body || !Array.isArray(body.items)) throw { kind: "resposta inválida" };
+      const items = body.items;
       if (!items.length) break;
       for (const entry of items) if (entry?.album) albums.push(entry.album);
       if (items.length < limit) break;
@@ -665,8 +741,7 @@ async function getSpotifySavedAlbums() {
     SPOTIFY_SAVED_ALBUMS = albums;
     return albums;
   } catch (e) {
-    console.error("Spotify biblioteca:", e);
-    throw new Error("Não foi possível ler sua biblioteca do Spotify.");
+    throw apiFailure("Spotify", e);
   }
 }
 
@@ -687,7 +762,7 @@ function getLibrary() {
     if (!title || !artists.length) continue;
 
     const rating = Number(p.personalRating ?? p.rating ?? 0);
-    result.push({ path, title, artists, rating: Number.isFinite(rating) ? rating : 0 });
+    result.push({ path, title, artists, tags: arr(p.genres ?? p.genre).map(text), rating: Number.isFinite(rating) ? rating : 0 });
   }
   return result;
 }
@@ -769,9 +844,9 @@ const FEEDBACK_WEIGHTS = { love: 3, interesting: 1.5, maybe: 0.5, dislike: -3, b
 
 async function parseFeedback() {
   const file = app.vault.getAbstractFileByPath(CFG.feedback);
-  const albums = new Map(), artists = new Map(), tracks = new Map();
-  const blockedArtists = new Set();
+  const albums = new Map(), artists = new Map(), tracks = new Map(), blockedArtists = new Set();
   if (!file) return { albums, artists, tracks, blockedArtists };
+  const effective = new Map();
   const raw = await app.vault.read(file);
   for (const line of String(raw).split(/\r?\n/)) {
     if (!line.includes("feedback:")) continue;
@@ -780,35 +855,38 @@ async function parseFeedback() {
       const match = part.trim().match(/(?:^|\s)(feedback|action|artist|album|track|type|source|mode):\s*(.*)$/i);
       if (match) fields[match[1].toLowerCase()] = match[2].trim();
     }
-    const artist = fields.artist || "";
-    const album = fields.album || "";
-    const track = fields.track || "";
+    const artist = fields.artist || "", album = fields.album || "", track = fields.track || "";
     const action = (fields.action || fields.feedback || "").toLowerCase();
-    const type = fields.type || (track ? "track" : album ? "album" : "artist");
-    if (!artist || !action) continue;
-    const weight = FEEDBACK_WEIGHTS[action] || 0;
-    const artistId = norm(artist);
-    if (!artists.has(artistId)) artists.set(artistId, { artist, score: 0 });
-    artists.get(artistId).score += weight;
-    if (type === "artist") {
-      if (action === "block") blockedArtists.add(artistId);
-      else if (action === "interesting" || action === "maybe") blockedArtists.delete(artistId);
+    const type = (fields.type || (track ? "track" : album ? "album" : "artist")).toLowerCase();
+    // "shown" é telemetria histórica, não desfaz uma preferência explícita.
+    if (!artist || action === "shown" || !Object.prototype.hasOwnProperty.call(FEEDBACK_WEIGHTS, action)) continue;
+    if ((type === "album" && !album) || (type === "track" && !track) || !["artist", "album", "track"].includes(type)) continue;
+    const key = type === "album" ? `album::${albumKey(artist, album)}` : type === "track" ? trackKey(artist, track) : artistKey(artist);
+    const old = effective.get(key);
+    effective.set(key, { artist, album, track, type, action, actions: [...(old?.actions || []), action] });
+  }
+  const signals = new Map();
+  for (const e of effective.values()) {
+    const id = norm(e.artist), weight = FEEDBACK_WEIGHTS[e.action];
+    if (!signals.has(id)) signals.set(id, { artist: e.artist, direct: 0, items: [] });
+    const signal = signals.get(id);
+    if (e.type === "artist") {
+      signal.direct = weight;
+      if (e.action === "block") blockedArtists.add(id);
+    } else {
+      // Uma avaliação de obra é evidência fraca sobre o artista inteiro.
+      signal.items.push(weight);
+      const target = e.type === "album" ? albums : tracks;
+      target.set(e.type === "album" ? albumKey(e.artist, e.album) : trackKey(e.artist, e.track), { ...e, score: weight });
     }
-    if (type === "album" && album) {
-      const key = feedbackKey(artist, album);
-      if (!albums.has(key)) albums.set(key, { artist, album, score: 0, actions: [] });
-      albums.get(key).score += weight;
-      albums.get(key).actions.push(action);
-    }
-    if (type === "track" && track) {
-      const key = trackKey(artist, track);
-      if (!tracks.has(key)) tracks.set(key, { artist, track, score: 0, actions: [] });
-      tracks.get(key).score += weight;
-      tracks.get(key).actions.push(action);
-    }
+  }
+  for (const [id, signal] of signals) {
+    const mean = signal.items.length ? signal.items.reduce((a, b) => a + b, 0) / signal.items.length : 0;
+    artists.set(id, { artist: signal.artist, score: signal.direct + Math.max(-1.5, Math.min(1.5, mean * .35)) });
   }
   return { albums, artists, tracks, blockedArtists };
 }
+
 function feedbackTrackState(feedback, artist, track) {
   const actions = feedback.tracks?.get(trackKey(artist, track))?.actions || [];
   const last = actions[actions.length - 1];
@@ -844,7 +922,7 @@ function invalidAlbum(album) {
   if (!n) return true;
 
   const blocked = [
-    "single", "radio edit", "radio version", "remix", "remixes", "instrumental",
+    "single", "radio edit", "radio version", "remix", "remixes",
     "karaoke", "acapella", "acoustic version", "sped up", "slowed", "slowed reverb"
   ];
 
@@ -891,9 +969,24 @@ function diversify(items, opts) {
 
       if (c >= (typeof maxPerArtist === "function" ? maxPerArtist(it) : maxPerArtist)) continue;
       if (accept && !accept(it, out)) continue;
+      // A versão instrumental e a obra-base não ocupam duas vagas na mesma rodada.
+      const workKey = item => albumKey(item.artist, (item.album || "").replace(/\s*[([]?\b(?:instrumentals?(?:\s+(?:edition|version))?|beats)\s*[\])]?\s*$/i,""));
+      if (it.type === "album" && out.some(selected => selected.type === "album" && workKey(selected) === workKey(it))) continue;
 
       const base = Math.max(0, it.discoveryScore || 0) + 0.001;
-      const s = base * Math.pow(penalty, c) * Math.pow(typePenalty, byType.get(it.type) || 0);
+      const tags = new Set((it.tags || (it.genre ? [it.genre] : [])).map(norm).filter(Boolean));
+      let overlap = 0;
+      if (tags.size) for (const selected of out) {
+        const other = new Set((selected.tags || (selected.genre ? [selected.genre] : [])).map(norm).filter(Boolean));
+        if (other.size) overlap = Math.max(overlap, [...tags].filter(t => other.has(t)).length / Math.sqrt(tags.size * other.size));
+      }
+      const connections = new Set((it.connections || []).map(norm));
+      let related = 0;
+      if (connections.size) for (const selected of out) {
+        const other = new Set((selected.connections || []).map(norm));
+        if (other.size) related = Math.max(related, [...connections].filter(t => other.has(t)).length / Math.sqrt(connections.size * other.size));
+      }
+      const s = base * Math.pow(penalty, c) * Math.pow(typePenalty, byType.get(it.type) || 0) * (1 - .2 * overlap - .1 * related);
 
       if (s > bestScore) { bestScore = s; best = i; }
     }
@@ -901,6 +994,10 @@ function diversify(items, opts) {
     if (best < 0) break;
 
     const [it] = pool.splice(best, 1);
+    if (CFG.debug) {
+      if (!diagnostics.diversity) diagnostics.diversity = [];
+      if (diagnostics.diversity.length < 120) diagnostics.diversity.push({key:candidateKey(it), before:it.discoveryScore, adjusted:bestScore, artistRepetitions:byArtist.get(norm(it.artist)) || 0});
+    }
     out.push(it);
     byArtist.set(norm(it.artist), (byArtist.get(norm(it.artist)) || 0) + 1);
     byType.set(it.type, (byType.get(it.type) || 0) + 1);
@@ -923,43 +1020,45 @@ const spotifyAlbumCache = new Map();
 
 async function resolveSpotifyAlbum(artist, album) {
   const ck = `${norm(artist)}::${norm(album)}`;
-  if (spotifyAlbumCache.has(ck)) return spotifyAlbumCache.get(ck);
-
+  if (spotifyAlbumCache.has(ck)) {
+    countDiagnostic(spotifyAlbumCache.get(ck) ? "spotifyCachedResolved" : "spotifyCachedRejected");
+    return spotifyAlbumCache.get(ck);
+  }
   const results = await spotifySearchAlbums(`"${album}" "${artist}"`);
-
-  const valid = results
-    .filter(isValidSpotifyAlbum)
-    .map(item => {
-      let score = 0;
-      const wanted = norm(album);
-      const got = norm(item.name);
-
-      if (got === wanted) score += 120;
-      else if (got.includes(wanted) || wanted.includes(got)) score += 60;
-
-      if (spotifyArtistMatches(item, artist)) score += 80;
-      return { item, score };
-    })
-    .sort((a, b) => b.score - a.score);
-
+  const wantedArtists = artistVariants(artist);
+  const primary = wantedArtists.length > 1 ? wantedArtists[1] : wantedArtists[0];
+  const valid = results.filter(isValidSpotifyAlbum).filter(item => {
+    const names = list(item.artists).map(a => norm(a?.name)).filter(Boolean);
+    // Sem correspondência textual integral do artista, título igual não basta.
+    return (names[0] === norm(artist) || names[0] === primary) && albumBaseTitle(item.name) === albumBaseTitle(album);
+  });
+  // Edições explicitamente diferentes não são intercambiáveis para resolução.
+  const exact = valid.filter(item => norm(item.name) === norm(album));
+  const choices = exact.length ? exact : valid.filter(item =>
+    norm(album) === albumBaseTitle(album) && norm(item.name) === albumBaseTitle(item.name));
+  const artistIds = new Set(choices.flatMap(item => list(item.artists)
+    .filter((a, i) => i === 0 && a?.id).map(a => a.id)));
   let resolved = null;
-
-  if (valid.length && valid[0].score >= 100) {
-    const item = valid[0].item;
+  const albumIds = new Set(choices.map(item => item.id));
+  // IDs regionais distintos só são intercambiáveis com identidade comprovada
+  // nos metadados resumidos. Datas/faixas diferentes ou ausentes ficam ambíguas.
+  const signature = item => JSON.stringify([norm(item.name), list(item.artists).map(a => a.id || norm(a.name)), item.release_date, item.total_tracks]);
+  const equivalent = albumIds.size > 1 && artistIds.size === 1 && choices.every(item =>
+    item.release_date && list(item.artists).every(a => a.id) && signature(item) === signature(choices[0]));
+  if (choices.length && artistIds.size <= 1 && (albumIds.size === 1 || equivalent)) {
+    const item = [...choices].sort((a,b) => String(a.id).localeCompare(String(b.id)))[0];
     resolved = {
-      type: "album",
-      artist,
+      type: "album", artist,
       artists: list(item.artists).map(a => text(a?.name)).filter(Boolean),
-      album: item.name,
-      spotifyId: item.id,
+      album: item.name, spotifyId: item.id,
       spotifyUri: item.uri || `spotify:album:${item.id}`,
       spotifyUrl: item.external_urls?.spotify || `https://open.spotify.com/album/${item.id}`,
       image: item.images?.[1]?.url || item.images?.[0]?.url || "",
-      totalTracks: Number(item.total_tracks || 0),
-      releaseDate: item.release_date || ""
+      totalTracks: Number(item.total_tracks || 0), releaseDate: item.release_date || ""
     };
   }
-
+  if (!resolved) countDiagnostic(!results.length ? "spotifyNotFound" : choices.length > 1 ? "spotifyAmbiguous" : "spotifyIncompatible");
+  else countDiagnostic("spotifyResolved");
   spotifyAlbumCache.set(ck, resolved);
   return resolved;
 }
@@ -967,13 +1066,23 @@ async function resolveSpotifyAlbum(artist, album) {
 async function resolveSpotifyTrack(artist, track) {
   const results = await spotifySearchTracks(`"${track}" "${artist}"`);
 
-  const valid = results.filter(item =>
-    item?.id && item?.name &&
-    list(item?.artists).some(a => norm(a?.name) === norm(artist))
-  );
+  // Beta 2: evita aceitar uma faixa diferente só porque é do mesmo artista.
+  // O nome do álbum é metadado da faixa, não seu título.
+  const wanted = norm(track);
+  const valid = results
+    .filter(item => item?.id && item?.name &&
+      list(item?.artists).some(a => norm(a?.name) === norm(artist)))
+    .map(item => {
+      const got = norm(item.name);
+      const exact = got === wanted;
+      const compatible = got.includes(wanted) || wanted.includes(got);
+      return {item, score: exact ? 100 : compatible ? 65 : 0};
+    })
+    .filter(x => x.score >= 65)
+    .sort((a,b) => b.score - a.score);
 
   if (!valid.length) return null;
-  const item = valid[0];
+  const item = valid[0].item;
   const artists = list(item.artists).map(a => text(a?.name)).filter(Boolean);
 
   return {
@@ -1009,11 +1118,13 @@ async function resolveSpotifyArtist(artist) {
 
 /* Resolve candidatos de ÁLBUM no Spotify (capa + links), reaplica
    a exclusão com o título real do Spotify e escolhe o conjunto final. */
-async function resolveAlbumPool(pool, divOpts) {
+async function resolveAlbumPool(pool, divOpts, feedback, taste = null) {
   const resolved = await parallel(pool, async c => {
     const sp = await resolveSpotifyAlbum(c.artist, c.album);
     if (!sp) return null;
-    if (ownedSpotifyAlbum(sp) || ownedAlbum(c.artist, c.album) || isKnown(c) || isKnown(sp)) return null;
+    if (sp.artists.some(a => feedback.blockedArtists.has(norm(a)))) { countDiagnostic("excludedBlocked"); return null; }
+    if (ownedSpotifyAlbum(sp) || ownedAlbum(c.artist, c.album)) { countDiagnostic("excludedOwned"); return null; }
+    if (isKnown(c) || isKnown(sp)) { countDiagnostic("excludedKnown"); return null; }
     return { ...c, ...sp, lastfmAlbum: c.album };
   });
 
@@ -1025,7 +1136,10 @@ async function resolveAlbumPool(pool, divOpts) {
     unique.push(r);
   }
 
-  return diversify(unique, { ...divOpts, limit: CFG.results });
+  await enrichAlbums(unique);
+  const scored = taste ? unique.map(c => scoreAlbumTaste(c, taste)) : unique;
+  if (CFG.debug) diagnostics.scores = scored.slice(0, 60).map(c => ({key:candidateKey(c), score:c.discoveryScore, components:c.scoreComponents}));
+  return diversify(scored, { ...divOpts, limit: CFG.results });
 }
 
 /* ============================================================
@@ -1040,7 +1154,7 @@ const DISTANT_TAGS = [
 ];
 
 async function getLibraryTags() {
-  const sample = LIBRARY.slice().sort((a, b) => b.rating - a.rating).slice(0, 15);
+  const sample = LIBRARY.filter(a => a.rating > 5.5 && a.rating <= 10).sort((a, b) => b.rating - a.rating).slice(0, 15);
   const details = await parallel(sample, i => albumDetails(i.artists[0], i.title));
 
   const map = new Map();
@@ -1077,31 +1191,32 @@ const albumCandidate = (a, score, reason) => ({
   type: "album", artist: a.artist, album: a.album, name: a.album, score, reason
 });
 
-async function manualFromArtist(artist) {
+async function manualFromArtist(artist, artistsOnly = false) {
   const results = [];
   const similar = await similarArtists(artist);
 
   for (const rel of similar) {
     results.push({
       type: "artist", artist: rel.name, name: rel.name,
-      score: rel.match * 100, reason: `Artista relacionado a ${artist}`
+      score: rel.match * 100, source: "similar-artist", artistMatch: rel.match, reason: `Artista relacionado a ${artist}`
     });
   }
 
+  if (artistsOnly) return results;
   const related = similar.slice(0, 12);
   const lists = await parallel(related, r => topAlbums(r.name));
 
   related.forEach((rel, i) => {
     for (const a of lists[i] || []) {
       if (invalidAlbum(a.album)) continue;
-      results.push(albumCandidate(a, rel.match * 100 - a.rank, `Álbum de ${a.artist}, relacionado a ${artist}`));
+      results.push({...albumCandidate(a, rel.match * 100 - a.rank, `Álbum de ${a.artist}, relacionado a ${artist}`), source:"similar-artist", artistMatch:rel.match});
     }
   });
 
   /* Álbuns do próprio artista da referência (a posse é filtrada depois). */
   for (const a of await topAlbums(artist)) {
     if (invalidAlbum(a.album)) continue;
-    results.push(albumCandidate(a, 80 - a.rank, `Álbum de ${artist} (referência)`));
+    results.push({...albumCandidate(a, 80 - a.rank, `Álbum de ${artist} (referência)`), source:"reference-artist", artistMatch:1});
   }
 
   return results;
@@ -1114,7 +1229,7 @@ async function manualFromAlbum(artist, album) {
   for (const rel of similar) {
     results.push({
       type: "artist", artist: rel.name, name: rel.name,
-      score: rel.match * 100, reason: `Artista relacionado a ${artist}`
+      score: rel.match * 100, source: "similar-artist", artistMatch: rel.match, reason: `Artista relacionado a ${artist}`
     });
   }
 
@@ -1130,38 +1245,79 @@ async function manualFromAlbum(artist, album) {
   tags.forEach((tag, i) => {
     (tagLists[i] || []).forEach((c, idx) => {
       if (invalidAlbum(c.album)) return;
-      results.push(albumCandidate(c, 70 - idx, `Relacionado pela tag "${tag}"`));
+      results.push({...albumCandidate(c, 70 - idx, `Relacionado pela tag "${tag}"`), source:"tag", sourceTag:tag});
     });
   });
 
   related.forEach((rel, i) => {
     for (const a of artistLists[i] || []) {
       if (invalidAlbum(a.album)) continue;
-      results.push(albumCandidate(a, rel.match * 100 - a.rank, `Álbum de ${a.artist}, relacionado a ${artist}`));
+      results.push({...albumCandidate(a, rel.match * 100 - a.rank, `Álbum de ${a.artist}, relacionado a ${artist}`), source:"similar-artist", artistMatch:rel.match});
     }
   });
 
   return results;
 }
 
-async function manualFromTrack(artist, track) {
+/* V1.9 Beta 1: primeiro usa track.getSimilar; quando insuficiente,
+   amplia por tags da própria faixa e artistas semelhantes. Não supõe
+   que uma música com tags iguais tenha necessariamente o mesmo som. */
+async function trackTags(artist, track) {
+  try {
+    const data = await lastfm("track.getTopTags", { artist, track, autocorrect: 1 });
+    return list(data?.toptags?.tag)
+      .map(t => ({ name: text(t?.name), count: Number(t?.count || 0) }))
+      .filter(t => t.name && t.count >= 1)
+      .sort((a,b) => b.count - a.count)
+      .slice(0, 4).map(t => t.name);
+  } catch (error) {
+    console.warn("Central: tags indisponíveis para a faixa", artist, track, error);
+    return [];
+  }
+}
+
+async function manualFromTrack(artist, track, tracksOnly = false) {
   const results = [];
   const similar = await similarTracks(artist, track);
-
-  for (const rel of similar) {
-    results.push({
-      type: "track", artist: rel.artist, track: rel.name, name: rel.name,
-      score: rel.match * 100, reason: `Música relacionada a ${artist} — ${track}`
-    });
+  for (const rel of similar) results.push({
+    type: "track", artist: rel.artist, track: rel.name, name: rel.name,
+    score: 65 + rel.match * 65, source:"similar-track", trackMatch:rel.match,
+    reason: `Faixa semelhante a ${artist} — ${track} (Last.fm)`
+  });
+  for (const name of [...new Set(similar.map(x => x.artist))].slice(0, 10)) {
+    results.push({type: "artist", artist: name, name, score: 38,
+      reason: `Artista de uma faixa relacionada a ${track}`});
   }
 
-  for (const name of [...new Set(similar.map(x => x.artist))].slice(0, 12)) {
-    results.push({
-      type: "artist", artist: name, name,
-      score: 40, reason: `Artista relacionado à música ${track}`
+  /* A busca original permanece prioritária. A ampliação ocorre quando
+     a API devolve poucos resultados, inclusive listas vazias. */
+  if (similar.length < 12) {
+    const [tags, artists] = await Promise.all([
+      trackTags(artist, track), similarArtists(artist)
+    ]);
+    const usefulTags = tags.filter(t => !/^(seen live|favorites|favourites|love|awesome|beautiful|music|my favorites|spotify|202[0-9]|201[0-9])$/i.test(t)).slice(0, 3);
+    const [tagLists, artistLists] = await Promise.all([
+      parallel(usefulTags, t => tagTopTracks(t), 3),
+      tracksOnly ? Promise.resolve([]) : parallel(artists.slice(0, 5), a => topAlbums(a.name), 3)
+    ]);
+    usefulTags.forEach((tag, i) => (tagLists[i] || []).slice(0, 12).forEach((t, rank) => {
+      if (norm(t.artist) === norm(artist) && norm(t.track) === norm(track)) return;
+      results.push({type:"track", artist:t.artist, track:t.track, name:t.track,
+        score: 49 - rank * .65 - i * 3, source:"tag", sourceTag:tag,
+        reason:`Descoberta pela tag “${tag}” de ${track}`});
+    }));
+    artists.slice(0, 5).forEach((a, i) => {
+      results.push({type:"artist", artist:a.name, name:a.name,
+        score: 37 + a.match * 22 - i, source:"similar-artist", artistMatch:a.match,
+        reason:`Artista relacionado a ${artist}`});
+      (artistLists[i] || []).slice(0, 4).forEach((album, rank) => {
+        if (!invalidAlbum(album.album)) results.push({...albumCandidate(album,
+          35 + a.match * 18 - rank, `Álbum de artista relacionado a ${artist}`), source:"similar-artist", artistMatch:a.match});
+      });
     });
+    if (!similar.length && !usefulTags.length && !artists.length)
+      console.warn("Central: Last.fm não forneceu semelhantes, tags ou artistas relacionados para", artist, track);
   }
-
   return results;
 }
 
@@ -1190,10 +1346,75 @@ async function manualFromTag(tag) {
   return results;
 }
 
-function manualFromReference(ref) {
-  if (ref.type === "artist") return manualFromArtist(ref.name);
+// Similaridade colaborativa/tags são aproximações; estas APIs não fornecem áudio.
+const BROAD_MUSICAL_TAGS = new Set(["hip hop", "hiphop", "rap", "rock", "pop", "soul", "jazz", "electronic", "alternative", "indie", "rnb", "r b", "funk", "metal", "folk", "classical"]);
+function specificTags(tags) { return musicalTags(tags).filter(t => !BROAD_MUSICAL_TAGS.has(t)); }
+function tagConnection(reference, candidate) {
+  const a = musicalTags(reference), b = musicalTags(candidate);
+  const shared = a.filter(t => b.includes(t));
+  const weight = t => BROAD_MUSICAL_TAGS.has(t) ? .1 : 1;
+  const denominator = a.reduce((v,t) => v + weight(t), 0) + b.reduce((v,t) => v + weight(t), 0);
+  return { shared, specific: specificTags(shared), overlap: denominator ? 2 * shared.reduce((v,t) => v + weight(t),0) / denominator : 0 };
+}
+async function artistTags(artist) {
+  try {
+    const data = await lastfm("artist.getTopTags", {artist, autocorrect:1});
+    return musicalTags(list(data?.toptags?.tag).filter(t => Number(t.count) > 0).map(t => t.name));
+  } catch { return []; }
+}
+async function referenceTags(ref) {
+  if (ref.type === "album") return (await albumDetails(ref.artist, ref.name)).tags;
+  if (ref.type === "track") return trackTags(ref.artist, ref.name);
+  if (ref.type === "artist") return artistTags(ref.name);
+  return [ref.name];
+}
+function alternativeUtility(candidate, references) {
+  const title = candidate.album || candidate.track || "";
+  const instrumental = /\b(?:instrumentals?(?:\s+(?:edition|version))?|beats)\s*[\])]?\s*$/i;
+  const alternative = /\b(deluxe|expanded|remaster(?:ed)?|live|anniversary)\b/i;
+  if (instrumental.test(title) && !references.some(r => instrumental.test(r.name))) return .55;
+  if (alternative.test(title) && !references.some(r => alternative.test(r.name))) return .9;
+  return 1;
+}
+function rankManualEvidence(candidate, references) {
+  const evaluations = (candidate.evidence || []).map(e => {
+    const connection = tagConnection(e.tags, candidate.tags);
+    const match = Math.max(0, Math.min(1, Number(e.trackMatch ?? e.artistMatch) || 0));
+    const directTrack = e.source === "similar-track";
+    const explicitTag = e.ref.type === "tag";
+    // Tags genéricas sozinhas não sustentam uma busca por obra específica.
+    const hasSpecific = connection.specific.length > 0;
+    const missing = !musicalTags(e.tags).length || !musicalTags(candidate.tags).length;
+    const artistReference = e.ref.type === "artist";
+    const eligible = explicitTag || (directTrack && match >= .3) || hasSpecific ||
+      (artistReference && match >= .5) || (missing && match >= .8 && e.source !== "tag");
+    const relation = directTrack ? 65 * match : 25 * match;
+    const tags = hasSpecific ? 60 * connection.overlap : explicitTag ? 35 * Math.max(.4, connection.overlap) : 0;
+    const score = relation + tags;
+    return { e, connection, eligible, score, relation, tags };
+  }).filter(x => x.eligible).sort((a,b) => b.score-a.score);
+  if (!evaluations.length) return null;
+  const best = evaluations[0];
+  const utility = alternativeUtility(candidate, references);
+  const score = best.score * utility;
+  if (score < 12) return null;
+  const reasons = [];
+  if (best.connection.specific.length) reasons.push(`Tags específicas em comum: ${best.connection.specific.slice(0,3).join(", ")}`);
+  if (best.e.source === "similar-track") reasons.push(`Relação entre faixas no Last.fm com ${best.e.ref.name}`);
+  else if (best.e.artistMatch) reasons.push(`Relação entre artistas no Last.fm com ${best.e.ref.artist || best.e.ref.name} (indireta para a obra)`);
+  if (best.e.ref.type === "tag") reasons.push(`Busca explícita pela tag ${best.e.ref.name}`);
+  if (utility < 1) reasons.push("Edição alternativa com prioridade reduzida");
+  return {...candidate, _s:score, discoveryScore:score, reason:reasons.join(" · "),
+    connections: evaluations.map(x => x.e.ref.artist || x.e.ref.name),
+    scoreComponents:{ relation:best.relation, referenceTags:best.tags, utility },
+    referenceStrength:best.connection.specific.length ? best.connection.overlap : 0,
+    evidence:candidate.evidence };
+}
+
+function manualFromReference(ref, targetType = null) {
+  if (ref.type === "artist") return manualFromArtist(ref.name, targetType === "artist");
   if (ref.type === "album") return manualFromAlbum(ref.artist, ref.name);
-  if (ref.type === "track") return manualFromTrack(ref.artist, ref.name);
+  if (ref.type === "track") return manualFromTrack(ref.artist, ref.name, targetType === "track");
   if (ref.type === "tag") return manualFromTag(ref.name);
   return Promise.resolve([]);
 }
@@ -1202,31 +1423,31 @@ function manualFromReference(ref) {
    MANUAL — FILTROS E MOTOR
    ============================================================ */
 function manualCandidateAllowed(c, seen, feedback) {
-  if (isKnown(c)) return false;
-  if (feedback.blockedArtists?.has(norm(c.artist))) return false;
+  if (isKnown(c)) { countDiagnostic("excludedKnown"); return false; }
+  if (feedback.blockedArtists?.has(norm(c.artist))) { countDiagnostic("excludedBlocked"); return false; }
   if (c.type === "track" && feedbackTrackState(feedback, c.artist, c.track)) return false;
   if (state.manualFilters.excludeCatalogArtists && catalogContainsArtist(c.artist)) return false;
-  if (seen.has(candidateKey(c))) return false;
+  if (seen.has(candidateKey(c))) { countDiagnostic("excludedRepeated"); return false; }
 
   if (c.type === "album") {
-    if (ownedAlbum(c.artist, c.album)) return false;
+    if (ownedAlbum(c.artist, c.album)) { countDiagnostic("excludedOwned"); return false; }
     const fb = feedbackAlbumState(feedback, c.artist, c.album);
-    if (fb === "block" || fb === "dislike") return false;
+    if (fb === "block" || fb === "dislike") { countDiagnostic("excludedFeedback"); return false; }
   }
   return true;
 }
 
-async function resolveManualCandidate(c) {
+async function resolveManualCandidate(c, feedback) {
   if (c.type === "artist") {
     const a = await resolveSpotifyArtist(c.artist);
-    return a && !isKnown(a) ? { ...a, discoveryScore: c._s, reason: c.reason } : null;
+    return a && !isKnown(a) ? { ...c, ...a, discoveryScore: c._s, reason: c.reason } : null;
   }
 
   if (c.type === "album") {
     const sp = await resolveSpotifyAlbum(c.artist, c.album);
     if (!sp) return null;
-    if (ownedSpotifyAlbum(sp) || ownedAlbum(c.artist, c.album)) return null;
-    return { ...sp, lastfmAlbum: c.album, discoveryScore: c._s, reason: c.reason };
+    if (ownedSpotifyAlbum(sp) || ownedAlbum(c.artist, c.album) || isKnown(c) || isKnown(sp)) return null;
+    return { ...c, ...sp, lastfmAlbum: c.album, discoveryScore: c._s, reason: c.reason };
   }
 
   if (c.type === "track") {
@@ -1238,7 +1459,7 @@ async function resolveManualCandidate(c) {
         t.artists.some(a => ownedAlbum(a, t.album))) {
       return null;
     }
-    return { ...t, discoveryScore: c._s, reason: c.reason };
+    return { ...c, ...t, discoveryScore: c._s, reason: c.reason };
   }
 
   return null;
@@ -1247,59 +1468,84 @@ async function resolveManualCandidate(c) {
 async function generateManual(references, feedback) {
   const seen = new Set(state.manualSeen);
   const preferredType = manualPreferredType(references);
-  const artistStats = catalogArtistStats();
-
-  const lists = await parallel(references, r => manualFromReference(r), 2);
+  const singleType = references.length && references.every(r => r.type === references[0].type) && ["album","artist","track"].includes(references[0].type) ? references[0].type : null;
+  const started = Date.now();
+  const refs = await parallel(references, async ref => ({ref, tags:await referenceTags(ref)}), 2);
+  const lists = await parallel(refs.filter(Boolean), async ({ref,tags}) =>
+    (await manualFromReference(ref,singleType)).map(c => ({...c, evidence:[{ref,tags,source:c.source || "related",artistMatch:c.artistMatch,trackMatch:c.trackMatch,sourceTag:c.sourceTag}]})), 2);
   const map = new Map();
-
   for (const c of lists.flatMap(l => l || [])) {
+    countDiagnostic(`source:manual:${c.source || c.type}`);
+    countDiagnostic("generated");
+    if (singleType && c.type !== singleType) { countDiagnostic("excludedWrongType"); continue; }
     if (!manualCandidateAllowed(c, seen, feedback)) continue;
     const k = candidateKey(c);
     if (!k) continue;
-
     const old = map.get(k);
-    if (!old) map.set(k, { ...c, referenceCount: 1 });
-    else { old.score += c.score * 0.35; old.referenceCount++; }
+    if (!old) map.set(k, {...c});
+    else {
+      old.evidence.push(...c.evidence);
+      old.score = Math.max(old.score, c.score);
+      countDiagnostic("duplicates");
+    }
   }
-
-  /* Ruído pequeno: no Refazer, empates não saem sempre na mesma ordem. */
-  const candidates = [...map.values()]
-    .map(c => ({
-      ...c,
-      _s: c.score + c.referenceCount * (c.type === "track" ? 15 : 20)
-        + manualTasteScore(c, feedback, artistStats)
-        + (preferredType && c.type === preferredType ? 65 : 0) + Math.random() * 4
-    }))
-    .sort((a, b) => b._s - a._s)
-    .slice(0, CFG.manualPoolSize);
-
-  const resolved = await parallel(candidates, resolveManualCandidate);
+  // A ordem da fonte só delimita o orçamento de metadados, não a afinidade final.
+  const pool = [...map.values()].sort((a,b) => b.score-a.score).slice(0, CFG.manualPoolSize * 2);
+  const ranked = [];
+  // Limite superior conservador: só encerramos quando nenhum candidato restante
+  // pode superar seis obras de artistas diferentes já avaliadas.
+  const upperBound = c => Math.max(...c.evidence.map(e =>
+    (e.source === "similar-track" ? 65 : 25) * Math.max(0,Math.min(1,Number(e.trackMatch ?? e.artistMatch)||0)) + 60)) * alternativeUtility(c,references);
+  pool.sort((a,b) => upperBound(b)-upperBound(a) || b.score-a.score);
+  for (let offset=0; offset<pool.length; offset+=CFG.concurrency) {
+    const batch = pool.slice(offset,offset+CFG.concurrency);
+    await parallel(batch, async c => {
+      if (c.type === "album") c.tags = (await albumDetails(c.artist, c.album)).tags;
+      else if (c.type === "track") c.tags = await trackTags(c.artist,c.track);
+      else c.tags = await artistTags(c.artist);
+      countDiagnostic("enriched");
+      ranked.push({c,ranked:rankManualEvidence(c,references)});
+    });
+    const diverse = diversify(ranked.map(x=>x.ranked).filter(Boolean),{limit:CFG.results,maxPerArtist:1});
+    if (diverse.length === CFG.results && diverse.every(c => c.type === "album" && spotifyAlbumCache.get(`${norm(c.artist)}::${norm(c.album)}`)) && offset+batch.length < pool.length &&
+        Math.min(...diverse.map(c=>c._s)) > upperBound(pool[offset+batch.length])) {
+      countDiagnostic("metadataSkippedByBound",pool.length-offset-batch.length); break;
+    }
+  }
+  // Empates têm ordem estável mesmo com respostas assíncronas.
+  ranked.sort((a,b)=>candidateKey(a.c).localeCompare(candidateKey(b.c)));
+  const candidates = ranked.map(x => x.ranked).filter(Boolean).sort((a,b) => b._s-a._s).slice(0,CFG.manualPoolSize);
+  countDiagnostic("excludedWeakEvidence", ranked.filter(x => !x.ranked).length);
+  if (CFG.debug) diagnostics.manual = ranked.slice(0,80).map(({c,ranked}) => ({key:candidateKey(c), origins:c.evidence.map(e => ({source:e.source,reference:referenceKey(e.ref),sourceTag:e.sourceTag})), before:c.score, after:ranked?._s ?? null, components:ranked?.scoreComponents, inclusion:ranked?.reason, exclusion:ranked ? null : "insufficient-reference-evidence"}));
+  diagnostics.manualMetadataMs = Date.now()-started;
+  const resolveStarted = Date.now();
+  const resolved = await parallel(candidates, c => resolveManualCandidate(c, feedback));
+  diagnostics.manualSpotifyMs = Date.now()-resolveStarted;
 
   let final = resolved.filter(Boolean).filter(it => {
     const names = it.artists || [it.artist];
+    if (names.some(a => feedback.blockedArtists.has(norm(a)))) return false;
     if (state.manualFilters.excludeCatalogArtists && names.some(catalogContainsArtist)) return false;
     return !seen.has(candidateKey(it)) && !isKnown(it);
   });
 
   final = dedupe(final);
 
-  // Cota suave de 2/3 para o tipo de referência. Se faltarem candidatos,
-  // preenche com outros tipos sem desperdiçar resultados.
+  // Tipo único mantém o contrato da referência; referências mistas admitem complemento.
   let selected;
   if (preferredType) {
-    const quota = Math.ceil(CFG.results * 2 / 3);
-    const primary = diversify(final.filter(x => x.type === preferredType), {
-      limit: quota, maxPerArtist: CFG.manualMaxPerArtist, penalty: .5, typePenalty: 1
+    const preferred = final.filter(x => x.type === preferredType);
+    const primary = diversify(preferred, {
+      limit:CFG.results, maxPerArtist:it => it.referenceStrength >= .65 ? 2 : 1, penalty:.45
     });
     const used = new Set(primary.map(candidateKey));
-    const byArtist = new Map();
-    for (const it of primary) byArtist.set(norm(it.artist), (byArtist.get(norm(it.artist)) || 0) + 1);
-    const rest = diversify(final.filter(x => !used.has(candidateKey(x))), {
-      limit: CFG.results - primary.length, maxPerArtist: it =>
-        Math.max(0, CFG.manualMaxPerArtist - (byArtist.get(norm(it.artist)) || 0)),
-      penalty: .5, typePenalty: .85
+    const counts = new Map();
+    primary.forEach(it => counts.set(norm(it.artist), (counts.get(norm(it.artist)) || 0)+1));
+    const rest = diversify(final.filter(x => !singleType && !used.has(candidateKey(x)) && x.type !== preferredType), {
+      limit:CFG.results-primary.length,
+      maxPerArtist:it => Math.max(0, 1-(counts.get(norm(it.artist)) || 0)), penalty:.45
     });
-    selected = [...primary, ...rest];
+    selected = [...primary,...rest];
   } else {
     // Tags: seleção mista de álbuns, artistas e músicas, com preenchimento
     // caso alguma categoria não ofereça resultados suficientes.
@@ -1349,30 +1595,31 @@ async function enrichAlbums(items) {
 /* ============================================================
    FEEDBACK — GRAVAÇÃO
    ============================================================ */
-async function appendFeedback(item, action) {
-  let file = app.vault.getAbstractFileByPath(CFG.feedback);
+// Serializa gravações para não perder uma avaliação quando dois botões são
+// acionados rapidamente. Se disponível, vault.process faz append atômico.
+let feedbackQueue = Promise.resolve();
+function appendFeedback(item, action) {
+  const write = feedbackQueue.catch(() => {}).then(async () => {
+    await ensureVaultParent(CFG.feedback);
+    let file = app.vault.getAbstractFileByPath(CFG.feedback);
+    if (!file) file = await app.vault.create(CFG.feedback, "# Feedback da Central\n\n");
 
-  if (!file) {
-    const parent = CFG.feedback.split("/").slice(0, -1);
-    let current = "";
-    for (const part of parent) {
-      current = current ? `${current}/${part}` : part;
-      if (!app.vault.getAbstractFileByPath(current)) await app.vault.createFolder(current);
+    const date = new Date().toLocaleDateString("pt-BR");
+    const artist = String(item.artist || "").replace(/[|\r\n]/g, " ").trim();
+    const album = String(item.type === "album" ? item.album || "" : "").replace(/[|\r\n]/g, " ").trim();
+    const track = String(item.type === "track" ? item.track || "" : "").replace(/[|\r\n]/g, " ").trim();
+    const mode = state.section === "personalized" ? state.personalizedMode : "";
+    const line = `- ${date} | feedback: ${action} | type: ${item.type || "album"} | artist: ${artist} | album: ${album} | track: ${track} | source: ${state.section} | mode: ${mode}\n`;
+
+    if (typeof app.vault.process === "function") {
+      await app.vault.process(file, contents => contents + line);
+    } else {
+      await app.vault.modify(file, (await app.vault.read(file)) + line);
     }
-    await app.vault.create(CFG.feedback, "# Feedback da Central\n\n");
-    file = app.vault.getAbstractFileByPath(CFG.feedback);
-  }
-
-  const date = new Date().toLocaleDateString("pt-BR");
-  const artist = String(item.artist || "").replace(/[|\r\n]/g, " ").trim();
-  const album = String(item.type === "album" ? item.album || "" : "").replace(/[|\r\n]/g, " ").trim();
-  const track = String(item.type === "track" ? item.track || "" : "").replace(/[|\r\n]/g, " ").trim();
-  const mode = state.section === "personalized" ? state.personalizedMode : "";
-
-  const line = `- ${date} | feedback: ${action} | type: ${item.type || "album"} | artist: ${artist} | album: ${album} | track: ${track} | source: ${state.section} | mode: ${mode}\n`;
-
-  await app.vault.modify(file, (await app.vault.read(file)) + line);
-  notice(`Feedback registrado: ${action}`);
+    notice(`Feedback registrado: ${action}`);
+  });
+  feedbackQueue = write.catch(() => {});
+  return write;
 }
 
 /* ============================================================
@@ -1395,30 +1642,33 @@ async function spotifySaveAlbum(item) {
   if (OWNED) { OWNED = null; OWNED_TITLES = null; }
 }
 
+// Um URI spotify:track pode ser interpretado pelo SO como o álbum da faixa.
+// URL canônica HTTPS aponta explicitamente para o tipo e ID corretos.
+function spotifyOpenUrl(item) {
+  const type = ["track", "album", "artist"].includes(item?.type) ? item.type : "";
+  const id = String(item?.spotifyId || "").trim();
+  if (type && /^[a-zA-Z0-9]{16,24}$/.test(id))
+    return `https://open.spotify.com/${type}/${id}`;
+  const uri = String(item?.spotifyUri || "");
+  const match = uri.match(/^spotify:(track|album|artist):([a-zA-Z0-9]+)$/);
+  if (match && (!type || type === match[1]))
+    return `https://open.spotify.com/${match[1]}/${match[2]}`;
+  const url = String(item?.spotifyUrl || "");
+  return /^https:\/\/open\.spotify\.com\/(track|album|artist)\/[^\s]+/i.test(url) ? url : "";
+}
 function openSpotify(item) {
-  const uri = item.spotifyUri;
-  const url = item.spotifyUrl;
-
-  if (uri) {
-    let left = false;
-    const onBlur = () => { left = true; };
-    window.addEventListener("blur", onBlur, { once: true });
-
-    const a = el("a", "", null, { href: uri });
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    /* Só abre a versão web se o aplicativo não tomou o foco. */
-    setTimeout(() => {
-      window.removeEventListener("blur", onBlur);
-      if (!left && !document.hidden && url) window.open(url, "_blank");
-    }, 900);
+  const url = spotifyOpenUrl(item);
+  if (!url) {
+    notice("Link do Spotify indisponível para este item.");
     return;
   }
-
-  if (url) window.open(url, "_blank");
+  // Acionado diretamente pelo clique, sem timeout ou popup duplicado.
+  // O Spotify controla se a página abre no aplicativo e se reproduz automaticamente.
+  try { window.open(url, "_blank"); }
+  catch (error) {
+    console.error("Central: falha ao abrir o Spotify", error);
+    notice("Não foi possível abrir o link do Spotify.");
+  }
 }
 
 /* ============================================================
@@ -1429,7 +1679,7 @@ root.innerHTML = "";
 
 const style = document.createElement("style");
 style.textContent = `
-/* NOTE TO NOTE — INTERFACE — V1.8 */
+/* NOTE TO NOTE — INTERFACE — V1.9 */
 .c12 {
   --nt-bg: #191d23; --nt-surface: #22272e; --nt-surface-2: #292f38;
   --nt-line: #383f48; --nt-ink: #e9edf0; --nt-muted: #a0aab5;
@@ -1534,6 +1784,50 @@ style.textContent = `
 .c12-chip {display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:4px;max-width:100%;background:var(--nt-bg);border:1px solid var(--nt-line);font-size:11px;overflow-wrap:anywhere}
 .c12-chip button {border:0;background:transparent;cursor:pointer;color:var(--nt-muted);padding:0 3px;box-shadow:none}
 .c12-loading,.c12-empty {padding:22px;text-align:center;border:1px dashed var(--nt-line);border-radius:5px;color:var(--nt-muted);font-size:12px;background:var(--nt-surface)}
+/* V1.9 Beta 3 — etapas: configuração OU resultados, nunca ambas. */
+.c12.c12-results-stage {max-width:1200px;gap:15px}
+.c12-results-stage .c12-hero {padding:2px 2px 9px}
+.c12-results-stage .c12-title {font-size:clamp(20px,3vw,27px);margin:5px 0 2px}
+.c12-results-stage .c12-subtitle {display:none}
+.c12-stage-top {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:1px 1px 14px;border-bottom:1px solid var(--nt-line)}
+.c12-stage-copy {display:flex;flex-direction:column;gap:2px;min-width:0}
+.c12-stage-kicker {font-size:10px;font-weight:750;letter-spacing:.12em;text-transform:uppercase;color:var(--nt-accent)}
+.c12-stage-title {font-size:clamp(17px,2.7vw,23px);font-weight:750;letter-spacing:-.025em;line-height:1.25}
+.c12-stage-detail {font-size:11px;color:var(--nt-muted)}
+.c12-stage-actions {display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.c12-stage-actions .c12-btn {font-size:11px!important}
+.c12-results-stage .c12-gallery {margin-top:2px}
+.c12-results-stage .c12-section-heading {margin-top:0}
+.c12-stage-loading {animation:c12-appear .16s ease both}
+@media(max-width:600px) {
+ .c12-stage-top {align-items:stretch}
+ .c12-stage-actions {width:100%}
+ .c12-stage-actions .c12-btn {flex:1 1 auto}
+}
+/* V1.9 Beta 1 — galeria como padrão; modo foco com ações originais */
+.c12-gallery {display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,165px),1fr));gap:13px;min-width:0}
+.c12 button.c12-gallery-card {display:flex!important;flex-direction:column;align-items:stretch;text-align:left;min-width:0;width:100%;padding:0!important;overflow:hidden;border:1px solid var(--nt-line)!important;border-radius:7px!important;background:var(--nt-surface)!important;color:var(--nt-ink)!important;cursor:pointer;white-space:normal!important;animation:c12-appear .18s ease both}
+.c12 button.c12-gallery-card:hover {border-color:var(--nt-accent)!important;background:var(--nt-surface-2)!important}
+.c12 button.c12-gallery-card:focus-visible {outline:2px solid var(--nt-accent);outline-offset:2px}
+.c12-gallery-cover {display:flex;align-items:center;justify-content:center;width:100%;aspect-ratio:1/1;object-fit:cover;background:var(--nt-surface-2);font-size:30px}
+.c12-gallery-info {padding:11px 12px 13px;min-width:0;flex:1}
+.c12-gallery-type {font-size:9px;letter-spacing:.11em;font-weight:750;color:var(--nt-accent);margin-bottom:6px}
+.c12-gallery-title {font-size:13px;font-weight:750;line-height:1.32;overflow-wrap:anywhere}
+.c12-gallery-artist {font-size:11px;color:var(--nt-muted);margin-top:5px;overflow-wrap:anywhere}
+.c12-focus {min-width:0;animation:c12-appear .17s ease both}
+.c12-focus > .c12-card {display:grid;grid-template-columns:minmax(0, 290px) minmax(0,1fr);gap:22px;padding:22px;align-items:start}
+.c12-focus > .c12-card > .c12-cover {width:100%;height:auto;aspect-ratio:1/1;max-width:290px;flex:auto;font-size:42px}
+.c12-focus > .c12-card .c12-card-title {font-size:clamp(19px,2.5vw,26px)}
+.c12-focus-nav {display:flex;justify-content:space-between;gap:9px;margin-top:12px}
+@keyframes c12-appear {from {opacity:0;transform:translateY(5px)} to {opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce) {.c12 button.c12-gallery-card,.c12-focus {animation:none!important}}
+@media(max-width:600px) {
+ .c12-gallery {grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ .c12-gallery-info {padding:9px 10px 11px}
+ .c12-focus > .c12-card {grid-template-columns:minmax(0,1fr);padding:13px;gap:12px}
+ .c12-focus > .c12-card > .c12-cover {width:min(100%,290px);max-width:290px;margin-inline:auto}
+ .c12-focus-nav .c12-btn {flex:1;min-width:0}
+}
 @media(max-width:720px){
  .c12 {padding:17px 14px;gap:14px}
  .c12-modes {grid-template-columns:1fr;gap:7px}
@@ -1550,10 +1844,64 @@ style.textContent = `
  .c12-card-title {font-size:14px}
  .c12-card {gap:9px;padding:10px}
 }
+
+/* NTN VISUAL — START */
+.c12.ntn-visual-beta {
+ --ntn-ui-bg:#191d23; --ntn-ui-surface:#22272e; --ntn-ui-raised:#292f38;
+ --ntn-ui-border:#3b4652; --ntn-ui-text:#e9edf0; --ntn-ui-muted:#a6b2bf;
+ --ntn-ui-accent:#9bb6ce; --ntn-ui-selected:#2c3b4a;
+ --ntn-ui-success:#8fc5ad; --ntn-ui-warning:#d9bb82; --ntn-ui-error:#e3a0a0;
+ --ntn-ui-radius:8px; --ntn-ui-control:38px;
+ --ntn-ui-space-1:4px; --ntn-ui-space-2:8px; --ntn-ui-space-3:12px; --ntn-ui-space-4:16px; --ntn-ui-space-5:24px;
+ --nt-bg:var(--ntn-ui-bg); --nt-surface:var(--ntn-ui-surface); --nt-surface-2:var(--ntn-ui-raised);
+ --nt-line:var(--ntn-ui-border); --nt-ink:var(--ntn-ui-text); --nt-muted:var(--ntn-ui-muted);
+ --nt-accent:var(--ntn-ui-accent); --nt-accent-bg:var(--ntn-ui-selected);
+ --ntn-bg:var(--ntn-ui-bg); --ntn-panel:var(--ntn-ui-surface); --ntn-raised:var(--ntn-ui-raised);
+ --ntn-border:var(--ntn-ui-border); --ntn-accent:var(--ntn-ui-accent); --ntn-ink:var(--ntn-ui-text); --ntn-muted:var(--ntn-ui-muted);
+ --nr-bg:var(--ntn-ui-bg); --nr-panel:var(--ntn-ui-surface); --nr-border:var(--ntn-ui-border); --nr-accent:var(--ntn-ui-accent); --nr-muted:var(--ntn-ui-muted);
+ width:100%; max-width:1100px!important; min-width:0; margin:0 auto;
+ color:var(--ntn-ui-text); font-family:var(--font-interface),system-ui,sans-serif;
+ font-size:14px; line-height:1.55; color-scheme:dark;
+}
+.c12.ntn-visual-beta, .c12.ntn-visual-beta * {box-sizing:border-box;}
+.c12.ntn-visual-beta > * {min-width:0;}
+.c12.ntn-visual-beta button {min-height:var(--ntn-ui-control)!important; max-width:100%; height:auto; white-space:normal!important; overflow-wrap:anywhere;
+ font-family:inherit; font-size:12px!important; font-weight:600; line-height:1.35; padding:8px 12px!important;
+ border-radius:6px!important; border:1px solid var(--ntn-ui-border)!important;
+ background:var(--ntn-ui-surface)!important; color:var(--ntn-ui-text)!important; box-shadow:none!important;
+ touch-action:manipulation;}
+.c12.ntn-visual-beta button:hover:not(:disabled) {border-color:var(--ntn-ui-accent)!important;}
+.c12.ntn-visual-beta .c12.ntn-visual-beta-btn:not(.secondary), .c12.ntn-visual-beta button.active, .c12.ntn-visual-beta button.is-active {background:var(--ntn-ui-selected)!important; border-color:var(--ntn-ui-accent)!important; color:var(--ntn-ui-text)!important;}
+.c12.ntn-visual-beta button:disabled {opacity:.5; cursor:default;}
+.c12.ntn-visual-beta :is(button,input,select,textarea,a,summary):focus-visible {outline:2px solid var(--ntn-ui-accent); outline-offset:3px;}
+.c12.ntn-visual-beta :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea) {
+ min-height:var(--ntn-ui-control); min-width:0; max-width:100%; padding:8px 10px; border-radius:6px!important;
+ background:var(--ntn-ui-bg)!important; color:var(--ntn-ui-text)!important; border:1px solid var(--ntn-ui-border)!important; font-family:inherit; font-size:12px;}
+.c12.ntn-visual-beta :is(input[type=checkbox],input[type=radio],input[type=range]) {accent-color:var(--ntn-ui-accent);}
+.c12.ntn-visual-beta .c12.ntn-visual-beta-panel,.c12.ntn-visual-beta .c12.ntn-visual-beta-card,.c12.ntn-visual-beta .c12.ntn-visual-beta-liked-panel {border-radius:var(--ntn-ui-radius)!important; border-color:var(--ntn-ui-border)!important;}
+.c12.ntn-visual-beta .c12.ntn-visual-beta-title,.c12.ntn-visual-beta .c12.ntn-visual-beta-stage-title {font-size:clamp(25px,3.5vw,34px); line-height:1.18; letter-spacing:-.035em; font-weight:750; overflow-wrap:anywhere;}
+.c12.ntn-visual-beta :is(h2,h3) {line-height:1.3; overflow-wrap:anywhere;}
+.c12.ntn-visual-beta :is(summary,label) {overflow-wrap:anywhere;}
+.c12.ntn-visual-beta summary {min-height:32px; cursor:pointer;}
+.c12.ntn-visual-beta :is(table,pre) {max-width:100%;}
+.c12.ntn-visual-beta pre {white-space:pre-wrap; overflow-wrap:anywhere;}
+.c12.ntn-visual-beta :is(.stat-value,.mm-stat-value,.music-diary-stat-value) {font-variant-numeric:tabular-nums;}
+@media (max-width:650px) {
+ .c12.ntn-visual-beta {padding:16px 12px 24px!important;}
+ .c12.ntn-visual-beta button {min-height:44px!important;}
+ .c12.ntn-visual-beta :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select) {min-height:42px;}
+}
+@media (prefers-reduced-motion:reduce) {
+ .c12.ntn-visual-beta *, .c12.ntn-visual-beta *::before, .c12.ntn-visual-beta *::after {animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; scroll-behavior:auto!important;}
+}
+.c12.ntn-visual-beta .c12.ntn-visual-beta-tabs,.c12.ntn-visual-beta .c12.ntn-visual-beta-toolbar {gap:8px;flex-wrap:wrap}.c12.ntn-visual-beta .c12.ntn-visual-beta-gallery {gap:12px}.c12.ntn-visual-beta .c12.ntn-visual-beta-reason {line-height:1.65}.c12.ntn-visual-beta .c12.ntn-visual-beta-panel-title {font-size:17px}
+@media(max-width:650px) { .c12.ntn-visual-beta :is(.mc-grid,.mm-diagnostics) {grid-template-columns:repeat(2,minmax(0,1fr));} .c12.ntn-visual-beta .mc-shell {padding:16px 12px;} }
+@media(max-width:420px) { .c12.ntn-visual-beta :is(.mc-grid,.mm-diagnostics) {grid-template-columns:1fr;} }
+/* NTN VISUAL — END */
 `;
 root.appendChild(style);
 
-const appRoot = el("div", "c12");
+const appRoot = el("div", "c12 ntn-visual-beta");
 root.appendChild(appRoot);
 
 const header = el("div");
@@ -1566,26 +1914,58 @@ appRoot.appendChild(header);
 /* ============================================================
    RENDER
    ============================================================ */
+function hasSectionResults(section = state.section) {
+  return ["manual", "personalized"].includes(section) &&
+    state.recommendationSection === section &&
+    Array.isArray(state.recommendations) && state.recommendations.length > 0;
+}
+
+function showResults() {
+  if (!hasSectionResults() || busy) return;
+  state.resultsView = true;
+  discoveryFocusKey = null;
+  saveState();
+  render();
+}
+
+function showSettings() {
+  state.resultsView = false;
+  discoveryFocusKey = null;
+  saveState();
+  render();
+}
+
 function render() {
   while (appRoot.children.length > 1) appRoot.removeChild(appRoot.lastChild);
 
-  const tabs = el("div", "c12-tabs");
+  // Na etapa de resultados, não montamos nem escondemos com CSS os formulários:
+  // eles simplesmente não existem na tela até o usuário voltar.
+  const resultsStage = state.resultsView &&
+    ["manual", "personalized"].includes(state.section) &&
+    state.recommendationSection === state.section &&
+    (busy || hasSectionResults());
+  appRoot.classList.toggle("c12-results-stage", resultsStage);
+  if (resultsStage) {
+    renderRecommendations();
+    return;
+  }
 
+  const tabs = el("div", "c12-tabs");
   const mkTab = (label, section) => {
     const b = el("button", "c12-tab" + (state.section === section ? " active" : ""), label);
-    b.onclick = () => { state.section = section; saveState(); render(); };
+    b.onclick = () => { state.section = section; state.resultsView = false; discoveryFocusKey = null; saveState(); render(); };
     return b;
   };
 
   tabs.appendChild(mkTab("Descoberta", "personalized"));
   tabs.appendChild(mkTab("Pesquisa manual", "manual"));
   tabs.appendChild(mkTab(`Curtidos · ${likedAlbums.length}`, "liked"));
-   tabs.appendChild(mkTab(`Já conheço · ${state.knownItems.length}`, "known"));
+  tabs.appendChild(mkTab(`Já conheço · ${state.knownItems.length}`, "known"));
   appRoot.appendChild(tabs);
 
   if (state.section === "manual") renderManual();
   else if (state.section === "liked") renderLiked();
-   else if (state.section === "known") renderKnown();
+  else if (state.section === "known") renderKnown();
   else renderPersonalized();
 }
 
@@ -1604,6 +1984,85 @@ function personalizedProfile() {
   return { rated, uniqueArtists, confidence, level };
 }
 
+// Tags de fonte identificada são indícios, não classificação definitiva de sonoridade.
+function musicalTags(tags) {
+  return [...new Set(list(tags).map(norm).filter(t => t &&
+    !/^(music|albums?|favorites?|favourites?|seen live|spotify|male vocalists|female vocalists|american|british|english|\d{4}|\d{4}s)$/.test(t)))].slice(0, 12);
+}
+async function albumTasteProfile(feedback) {
+  const works = new Map();
+  const add = (artist, album, signal, tags = []) => {
+    if (!artist || !album) return;
+    works.set(albumKey(artist, album), {artist, album, signal, tags: musicalTags(tags)});
+  };
+  for (const a of LIBRARY) if (a.rating > 0 && a.rating <= 10)
+    add(a.artists[0], a.title, (a.rating - 5.5) / 4.5, a.tags);
+  for (const a of likedAlbums) if (a.type === "album" && !works.has(albumKey(a.artist, a.album)))
+    add(a.artist, a.album, .4, a.genre ? [a.genre] : []);
+  const ratedKeys = new Set(LIBRARY.filter(item => item.rating > 0 && item.rating <= 10).map(item => albumKey(item.artists[0],item.title)));
+  for (const a of feedback.albums.values()) {
+    const key = albumKey(a.artist,a.album), previous = works.get(key);
+    const rated = ratedKeys.has(key);
+    const feedbackSignal = Math.max(-1,Math.min(1,a.score/3));
+    // Nota explícita mantém 80% da evidência; feedback fraco ajusta, sem substituir.
+    const signal = rated ? .8 * previous.signal + .2 * feedbackSignal : .6 * feedbackSignal;
+    add(a.artist,a.album,signal,previous?.tags || []);
+  }
+  // Rodadas por artista evitam que discografias extensas consumam todo o orçamento.
+  const grouped = new Map();
+  for (const a of works.values()) {
+    const key = norm(a.artist);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(a);
+  }
+  for (const group of grouped.values()) group.sort((a,b) => Math.abs(b.signal)-Math.abs(a.signal) || a.album.localeCompare(b.album));
+  const sample = [];
+  for (let round = 0; round < 3 && sample.length < 30; round++) for (const group of grouped.values()) {
+    if (group[round] && sample.length < 30) sample.push(group[round]);
+  }
+  await parallel(sample.filter(a => !a.tags.length), async a => { a.tags = musicalTags((await albumDetails(a.artist, a.album)).tags); });
+  const tags = new Map();
+  for (const a of sample) for (const tag of a.tags) {
+    if (!tags.has(tag)) tags.set(tag, new Map());
+    const artist = norm(a.artist), signals = tags.get(tag);
+    if (!signals.has(artist)) signals.set(artist, []);
+    signals.get(artist).push(a.signal);
+  }
+  const affinity = new Map();
+  for (const [tag, artists] of tags) {
+    const values = [...artists.values()].map(signals => signals.reduce((a,b) => a+b, 0) / signals.length);
+    affinity.set(tag, values.reduce((a,b) => a+b, 0) / (values.length + 2));
+  }
+  return { works: sample, affinity };
+}
+function scoreAlbumTaste(candidate, taste) {
+  const tags = musicalTags(candidate.tags);
+  const shared = tags.filter(t => taste.affinity.has(t));
+  const tagAffinity = shared.length ? shared.reduce((sum,t) => sum + taste.affinity.get(t), 0) / Math.sqrt(tags.length * shared.length) : 0;
+  // Uma conexão por artista + conjunto de tags; obras redundantes não multiplicam afinidade.
+  const matches = new Map();
+  for (const work of taste.works) {
+    if (work.signal <= 0 || !work.tags.length || !tags.length) continue;
+    const common = tags.filter(t => work.tags.includes(t));
+    const overlap = common.length / Math.sqrt(tags.length * work.tags.length);
+    if (!overlap) continue;
+    const key = norm(work.artist) + "::" + [...common].sort().join("|");
+    const evidence = { work, score: overlap * work.signal };
+    if (!matches.has(key) || evidence.score > matches.get(key).score) matches.set(key, evidence);
+  }
+  const links = [...matches.values()].sort((a,b) => b.score-a.score).slice(0, 3);
+  // Mesmo sinal de tags: conexões explicam, mas não somam novamente à pontuação.
+  const base = Math.max(0, Number(candidate.discoveryScore) || 0);
+  const adjustment = 4 * tagAffinity;
+  const utility = alternativeUtility(candidate, taste.works.filter(w => w.signal > 0).map(w => ({name:w.album})));
+  const score = Math.max(0, base + adjustment) * utility;
+  const reasons = [candidate.reason];
+  if (utility < 1) reasons.push("Edição alternativa com prioridade reduzida");
+  if (shared.length) reasons.push(`${tagAffinity >= 0 ? "afinidade" : "menor afinidade"} de tags: ${shared.slice(0,2).join(", ")}`);
+  if (links.length && tagAffinity > 0) reasons.push(`tags em comum com ${links.slice(0,2).map(x => x.work.album).join(" e ")}`);
+  return { ...candidate, discoveryScore: score, reason: reasons.filter(Boolean).join(" · "), scoreComponents: {artist:base, tags:adjustment, utility}, albumConnections:links.length };
+}
+
 async function personalizedSeeds(feedback) {
   const profile = personalizedProfile();
   const byArtist = new Map();
@@ -1613,34 +2072,29 @@ async function personalizedSeeds(feedback) {
     const existing = byArtist.get(key);
     if (!existing || existing.weight < weight) byArtist.set(key, { artist, weight, origin });
   };
-  // Notas têm prioridade; notas baixas não viram sementes positivas.
-  for (const item of profile.rated) {
-    const positive = Math.max(0, (item.rating - 5.5) / 4.5);
-    if (positive > 0) for (const artist of item.artists) add(artist, 2 + positive * 8, "avaliações");
+  // Média regularizada: duas avaliações neutras reduzem confiança em uma única nota;
+  // mais álbuns aumentam confiança sem multiplicar indefinidamente o peso.
+  for (const e of catalogArtistStats().values()) {
+    const n = e.ratings.length;
+    if (!n) continue;
+    const mean = (e.ratings.reduce((a,b) => a+b, 0) + 11) / (n + 2);
+    const positive = Math.max(0, (mean - 5.5) / 4.5);
+    if (positive) add(e.artist, 2 + positive * 8, "avaliações");
   }
-  // Last.fm complementa perfis pequenos. Username é opcional.
-  if (profile.confidence < .85 && CFG.lastfmUser && CFG.lastfmKey) {
-    try {
-      const data = await lastfm("user.getTopArtists", { user: CFG.lastfmUser, period: "6month", limit: 25 });
-      for (const artist of list(data?.topartists?.artist)) {
-        const plays = Number(artist?.playcount || 0);
-        add(text(artist?.name), Math.min(5, 1 + Math.log1p(Math.max(0, plays))) * (1 - .75 * profile.confidence), "Last.fm");
-      }
-    } catch (e) { console.warn("Central: não foi possível complementar perfil pelo Last.fm", e); }
+  // Curtidas são sinais próprios; uma obra não equivale a curtir o artista.
+  for (const item of likedAlbums) add(item.artist, item.type === "artist" ? 5 : 2, "curtidos");
+  for (const entry of feedback.artists.values()) {
+    if (entry.score > 0) add(entry.artist, Math.min(5, 1 + entry.score), "feedback");
   }
   // Calibração opcional, sem criar avaliações fictícias.
   for (const artist of String(state.personalizedSeeds || "").split(/[;\n]+/).map(x => x.trim()).filter(Boolean).slice(0, 12)) {
     add(artist, profile.rated.length ? 5 : 8, "preferências informadas");
   }
-  // Sem username Last.fm, os artistas catalogados ajudam no início.
-  if (profile.rated.length < 5) {
-    for (const e of catalogArtistStats().values()) add(e.artist, 1.5, "catálogo");
-  }
   // Feedback negativo reduz o peso, mas não altera avaliações pessoais.
   for (const [key, entry] of byArtist) {
     const penalty = Math.max(-8, Math.min(8, artistFeedbackScore(feedback, entry.artist)));
-    entry.weight = Math.max(0, entry.weight + penalty * 0.6);
-    if (entry.weight <= 0) byArtist.delete(key);
+    entry.weight = Math.max(0, entry.weight + Math.min(0, penalty) * 0.6);
+    if (entry.weight <= 0 || feedback.blockedArtists.has(key)) byArtist.delete(key);
   }
   return { profile, seeds: [...byArtist.values()].sort((a,b)=>b.weight-a.weight).slice(0, 20) };
 }
@@ -1665,19 +2119,37 @@ const EXPLORATION_FAMILIES = [
 ];
 
 async function discoverGenreExploration(feedback, seen) {
-  const libraryTags = await getLibraryTags();
+  const taste = await albumTasteProfile(feedback);
+  const libraryTags = new Map([...taste.affinity].filter(([, value]) => value > 0));
   // Penaliza famílias já representadas no acervo; não as proíbe para sempre.
   const families = EXPLORATION_FAMILIES.map(([family, ...tags]) => ({
     family, tags,
     presence: tags.reduce((sum, tag) => sum + (libraryTags.get(norm(tag)) || 0), 0)
   }));
-  const rare = families.filter(f => f.presence === 0);
-  const other = families.filter(f => f.presence !== 0).sort((a,b) => a.presence-b.presence);
-  // Cada rodada usa até oito famílias diferentes, sem depender de artistas similares.
-  const chosen = [...shuffle(rare), ...shuffle(other)].slice(0, 8);
+  // Tags fora das famílias predefinidas (por exemplo, hip hop) também ancoram exploração.
+  for (const [tag, value] of libraryTags) if (!families.some(f => f.tags.some(t => norm(t) === tag)))
+    families.push({family: tag, tags: [tag], presence: value});
+  // Famílias com evidência positiva vêm primeiro; uma família distante é
+  // reservada para exploração, sem interpretar ausência como preferência.
+  const near = families.filter(f => f.presence > 0).sort((a,b) => b.presence-a.presence);
+  if (!near.length) throw new Error("Avalie álbuns e obtenha tags Last.fm para orientar a exploração de gêneros.");
+  const anchors = [...libraryTags.entries()].sort((a,b) => b[1]-a[1]).slice(0, 4);
+  const relatedLists = await parallel(anchors, async ([tag]) => {
+    const data = await lastfm("tag.getSimilar", {tag});
+    return list(data?.similartags?.tag).map(t => norm(t?.name));
+  });
+  const relatedTags = new Set(relatedLists.flatMap(x => x || []));
+  for (const tag of relatedTags) if (tag && !families.some(f => f.tags.some(t => norm(t) === tag)))
+    families.push({family: tag, tags: [tag], presence: 0});
+  const related = families.filter(f => !f.presence && f.tags.some(t => relatedTags.has(norm(t))));
+  const distant = shuffle(families.filter(f => !f.presence && !related.includes(f)));
+  const adjacent = shuffle(related);
+  const chosen = [...near.slice(0, 3), ...adjacent.slice(0, 2), ...distant.slice(0, 1), ...near.slice(3,4), ...adjacent.slice(2,3)].slice(0, 8);
   const searches = await parallel(chosen, async f => {
     // Tenta uma subtag diferente por rodada para não repetir sempre o mesmo topo.
-    const tags = shuffle(f.tags);
+    const tags = shuffle(f.tags).sort((a,b) =>
+      ((libraryTags.get(norm(b)) || 0) + (relatedTags.has(norm(b)) ? .5 : 0)) -
+      ((libraryTags.get(norm(a)) || 0) + (relatedTags.has(norm(a)) ? .5 : 0)));
     for (const tag of tags.slice(0, 2)) {
       const albums = await tagTopAlbums(tag);
       if (albums?.length) return {tag, albums};
@@ -1691,32 +2163,46 @@ async function discoverGenreExploration(feedback, seen) {
     const candidates = [];
     for (const album of shuffle((result.albums || []).slice(0, 28))) {
       if (!album?.artist || !album?.album || invalidAlbum(album.album)) continue;
-      if (ownedAlbum(album.artist, album.album) || isKnown({type:"album", artist:album.artist, album:album.album})) continue;
-      if (feedback.blockedArtists?.has(norm(album.artist))) continue;
+      if (ownedAlbum(album.artist, album.album)) { countDiagnostic("excludedOwned"); continue; }
+      if (isKnown({type:"album", artist:album.artist, album:album.album})) { countDiagnostic("excludedKnown"); continue; }
+      if (feedback.blockedArtists?.has(norm(album.artist))) { countDiagnostic("excludedBlocked"); continue; }
       const fb = feedbackAlbumState(feedback, album.artist, album.album);
-      if (fb === "block" || fb === "dislike") continue;
+      if (fb === "block" || fb === "dislike") { countDiagnostic("excludedFeedback"); continue; }
       const c = {
         type:"album", artist:album.artist, album:album.album,
-        genreFamily:f.family, discoveryScore:30 - f.presence * 3,
-        reason:`Exploração de ${result.tag}: um estilo pouco presente no seu acervo`,
+        genreFamily:f.family, tags: [result.tag], discoveryScore:f.presence ? 6 : related.includes(f) ? 5 : 3,
+        distance:f.presence ? "near" : related.includes(f) ? "adjacent" : "distant",
+        reason:f.presence ? `Exploração de ${result.tag}: relacionado às tags de álbuns bem avaliados` : related.includes(f) ? `Exploração de ${result.tag}: tag relacionada pelo Last.fm` : `Exploração ocasional de ${result.tag}: estilo sem evidência no perfil`,
         mode:"explore"
       };
       if (!seen.has(candidateKey(c))) candidates.push(c);
+      else countDiagnostic("excludedRepeated");
     }
-    groups.push({family:f.family, candidates:dedupe(candidates).slice(0, 8)});
+    countDiagnostic("source:exploration", candidates.length);
+    groups.push({family:f.family, distant:!f.presence && !related.includes(f), candidates:dedupe(candidates).slice(0, 8)});
   });
+  // Famílias próximas mantêm prioridade; a distância é uma opção ocasional.
   // Resolve alternativas de cada família; só depois escolhe o resultado final.
   const resolved = await parallel(groups, async g => {
     const items = await parallel(g.candidates, async c => {
       const sp = await resolveSpotifyAlbum(c.artist, c.album);
-      if (!sp || ownedSpotifyAlbum(sp) || ownedAlbum(c.artist, c.album) || isKnown(c) || isKnown(sp)) return null;
+      if (!sp || sp.artists.some(a => feedback.blockedArtists.has(norm(a))) || ownedSpotifyAlbum(sp) || ownedAlbum(c.artist, c.album) || isKnown(c) || isKnown(sp)) return null;
       return {...c, ...sp, lastfmAlbum:c.album};
     });
-    return {family:g.family, items:items.filter(Boolean)};
+    const valid = items.filter(Boolean);
+    await enrichAlbums(valid);
+    const profileTags = [...taste.affinity].filter(([,value]) => value > 0).map(([tag]) => tag);
+    const connected = valid.filter(c => !g.distant || tagConnection(profileTags,c.tags).specific.length > 0);
+    countDiagnostic("excludedUnanchoredExploration",valid.length-connected.length);
+    return {family:g.family, distant:g.distant, items:connected.map(c => {
+      const scored = scoreAlbumTaste(c,taste);
+      if (g.distant) scored.reason = `Exploração distante com ponte de tags específicas: ${tagConnection(profileTags,c.tags).specific.slice(0,2).join(", ")}`;
+      return scored;
+    }).sort((a,b) => b.discoveryScore-a.discoveryScore)};
   });
   const output = [], ids = new Set(), artists = new Set();
   // Primeira passagem: no máximo UM álbum por família e artista.
-  for (const group of shuffle(resolved.filter(Boolean))) {
+  for (const group of resolved.filter(Boolean)) {
     const pick = group.items.find(c => !ids.has(c.spotifyId) && !artists.has(norm(c.artist)));
     if (!pick) continue;
     output.push(pick); ids.add(pick.spotifyId); artists.add(norm(pick.artist));
@@ -1724,7 +2210,7 @@ async function discoverGenreExploration(feedback, seen) {
   }
   // Se menos famílias estiverem disponíveis, preenche sem duplicar álbuns/artistas.
   if (output.length < CFG.results) {
-    for (const group of shuffle(resolved.filter(Boolean))) {
+    for (const group of resolved.filter(g => g && !g.distant)) {
       for (const c of group.items) {
         if (ids.has(c.spotifyId) || artists.has(norm(c.artist))) continue;
         output.push(c); ids.add(c.spotifyId); artists.add(norm(c.artist));
@@ -1740,7 +2226,7 @@ async function discoverPersonalized(feedback, seen) {
   const mode = state.personalizedMode || "balanced";
   if (mode === "explore") return discoverGenreExploration(feedback, seen);
   const { profile, seeds } = await personalizedSeeds(feedback);
-  if (!seeds.length && mode !== "explore") throw new Error("Para começar, informe alguns artistas favoritos abaixo ou conecte seu Last.fm nas Configurações.");
+  if (!seeds.length && mode !== "explore") throw new Error("Para começar, avalie álbuns, curta itens ou informe artistas favoritos abaixo.");
   const chosen = weightedSample(seeds, Math.min(mode === "explore" ? 8 : 10, seeds.length));
   const similar = await parallel(chosen, s => similarArtists(s.artist));
   const candidates = new Map();
@@ -1765,7 +2251,8 @@ async function discoverPersonalized(feedback, seen) {
   }
   for (const c of candidates.values()) {
     const bridges = new Set(c.via.map(v => norm(v.artist))).size;
-    c.score *= 1 + Math.min(0.45, Math.max(0, bridges - 1) * .15);
+    const independent = [...new Map(c.via.map(v => [norm(v.artist), v.score])).values()].sort((a,b) => b-a).slice(0,3);
+    c.score = independent[0] + (independent.slice(1).reduce((a,b) => a+b,0) / Math.max(1, independent.length-1)) * .25;
   }
   const artists = [...candidates.values()].sort((a,b)=>b.score-a.score).slice(0, CFG.maxDiscoveryArtists);
   const lists = await parallel(artists, a => topAlbums(a.artist));
@@ -1773,46 +2260,64 @@ async function discoverPersonalized(feedback, seen) {
   artists.forEach((a,i) => {
     const best = [...a.via].sort((x,y)=>y.score-x.score)[0];
     for (const album of lists[i] || []) {
-      if (feedback.blockedArtists?.has(norm(album.artist))) continue;
-      if (invalidAlbum(album.album) || ownedAlbum(album.artist, album.album) || isKnown({type:"album", artist:album.artist, album:album.album})) continue;
+      if (feedback.blockedArtists?.has(norm(album.artist))) { countDiagnostic("excludedBlocked"); continue; }
+      countDiagnostic("source:similarArtists");
+      if (invalidAlbum(album.album)) { countDiagnostic("excludedInvalid"); continue; }
+      if (ownedAlbum(album.artist, album.album)) { countDiagnostic("excludedOwned"); continue; }
+      if (isKnown({type:"album", artist:album.artist, album:album.album})) { countDiagnostic("excludedKnown"); continue; }
       const fb = feedbackAlbumState(feedback, album.artist, album.album);
-      if (fb === "block" || fb === "dislike") continue;
+      if (fb === "block" || fb === "dislike") { countDiagnostic("excludedFeedback"); continue; }
       const candidate = {
         type: "album", artist: album.artist, album: album.album, known: a.known,
-        discoveryScore: a.score + Math.max(0, 16-album.rank) * .45,
+        discoveryScore: Math.max(0, a.score + Math.max(0, 16-album.rank) * .01 + Math.min(0, artistFeedbackScore(feedback, album.artist))),
+        connections: [...new Set(a.via.map(v => v.artist))],
         reason: `Afinidade com ${best?.artist || "seu perfil"} (${best?.origin || "descoberta"})` + (profile.rated.length < 5 ? " · perfil inicial" : ""),
         mode: "personalized"
       };
       if (!seen.has(candidateKey(candidate)) && !isKnown(candidate)) raw.push(candidate);
+      else countDiagnostic("excludedRepeated");
     }
   });
   // Equilibrado mantém artistas novos, inclusive dentro de gêneros conhecidos.
   // Exploratório é tratado separadamente: diversidade REAL de gêneros.
-  const maxPerArtist = mode === "explore" ? 1 : 2;
-  const pool = diversify(dedupe(raw), {limit: CFG.results * CFG.resolvePoolFactor, maxPerArtist, penalty: .5});
-  return resolveAlbumPool(pool, {maxPerArtist, penalty: .5});
+  countDiagnostic("generated", raw.length);
+  const maxPerArtist = mode === "familiar" ? 2 : 1;
+  const taste = await albumTasteProfile(feedback);
+  // Retém alternativas de uma mesma discografia até avaliar tags por álbum.
+  const pool = diversify(dedupe(raw), {limit: CFG.results * CFG.resolvePoolFactor * 2, maxPerArtist: 3, penalty: .8});
+  return resolveAlbumPool(pool, {maxPerArtist, penalty: .5}, feedback, taste);
 }
 
 async function runPersonalized() {
   if (busy) return;
+  const previous = hasSectionResults("personalized") ? [...state.recommendations] : [];
+  const wasResultsView = state.resultsView;
   busy = true;
+  beginDiagnostics();
+  let delivered = [];
   state.recommendations = [];
+  discoveryFocusKey = null;
   render();
   try {
     const feedback = await parseFeedback();
     await getSpotifySavedAlbums();
     buildOwnedIndex();
     let results = await discoverPersonalized(feedback, new Set(state.personalizedSeen));
+    delivered = results;
     if (results.length) {
       results = await enrichAlbums(results);
       remember(state.personalizedSeen, results);
-    } else notice("Nenhuma recomendação nova encontrada. Tente outro modo ou limpe o histórico.");
-    state.recommendations = results.filter(it => !isKnown(it));
+    } else if (!apiIssues.size && !diagnostics.counts.unexpectedWorkerErrors) notice("Nenhuma recomendação nova encontrada. Tente outro modo ou limpe o histórico.");
+    const visible = results.filter(it => !isKnown(it));
+    state.recommendations = visible.length ? visible : previous;
     state.recommendationSection = "personalized";
+    state.resultsView = visible.length > 0 || (wasResultsView && previous.length > 0);
   } catch (e) {
     console.error(e);
     notice(e?.message || "Não foi possível gerar recomendações personalizadas.");
-  } finally { busy = false; saveState(); render(); }
+    state.recommendations = previous;
+    state.resultsView = wasResultsView && previous.length > 0;
+  } finally { finishDiagnostics(delivered); reportApiIssues(delivered.length); busy = false; saveState(); render(); }
 }
 
 function renderPersonalized() {
@@ -1822,8 +2327,8 @@ function renderPersonalized() {
   if (!CFG.lastfmKey) panel.appendChild(el("div", "c12-reason", "Configure sua chave Last.fm para habilitar a descoberta. Suas avaliações continuam disponíveis como base do perfil."));
   panel.appendChild(el("div", "c12-mode-desc", `${p.level} · ${p.rated.length} avaliações válidas · ${p.uniqueArtists} artistas avaliados · confiança estimada ${Math.round(p.confidence * 100)}%`));
   panel.appendChild(el("div", "c12-reason", p.rated.length < 5
-    ? "Perfil inicial: usamos suas preferências informadas, artistas do catálogo e, quando configurado, histórico do Last.fm."
-    : "Suas avaliações orientam as recomendações. O Last.fm complementa o perfil quando há poucos dados."));
+    ? "Perfil inicial: usamos avaliações, curtidas, feedback e referências informadas."
+    : "Avaliações, curtidas e feedback orientam o perfil; o Last.fm fornece relações e tags."));
   const modes = el("div", "c12-modes");
   for (const [mode, label, desc] of [
     ["familiar", "Familiar", "Uma extensão natural dos seus favoritos"],
@@ -1847,6 +2352,11 @@ function renderPersonalized() {
   const go = el("button", "c12-btn", busy ? "Pesquisando..." : "Gerar recomendações", {disabled:busy});
   go.onclick = () => { state.personalizedSeeds = seedInput.value; saveState(); runPersonalized(); };
   toolbar.appendChild(go);
+  if (hasSectionResults("personalized")) {
+    const resume = el("button", "c12-btn secondary", "Ver resultados anteriores", {disabled:busy});
+    resume.onclick = showResults;
+    toolbar.appendChild(resume);
+  }
   if (state.personalizedSeen.length) {
     const reset = el("button", "c12-btn secondary", "Limpar histórico de sugestões");
     reset.onclick = () => { state.personalizedSeen = []; saveState(); render(); };
@@ -1854,7 +2364,6 @@ function renderPersonalized() {
   }
   panel.appendChild(toolbar);
   appRoot.appendChild(panel);
-  renderRecommendations();
 }
 
 /* ============================================================
@@ -1909,8 +2418,13 @@ function manualTasteScore(candidate, feedback, stats) {
 async function runManualSearch(isRetry) {
   if (!state.manualSelected.length || busy) return;
 
+  const previous = hasSectionResults("manual") ? [...state.recommendations] : [];
+  const wasResultsView = state.resultsView;
   busy = true;
+  beginDiagnostics();
+  let delivered = [];
   state.recommendations = [];
+  discoveryFocusKey = null;
 
   /* Pesquisa nova começa do zero; "Refazer" preserva o histórico. */
   if (!isRetry) state.manualSeen = [];
@@ -1923,19 +2437,28 @@ async function runManualSearch(isRetry) {
 
     const feedback = await parseFeedback();
     const results = await generateManual(state.manualSelected, feedback);
+    delivered = results;
 
     if (!results.length) {
-      notice(isRetry
+      if (!apiIssues.size && !diagnostics.counts.unexpectedWorkerErrors) notice(isRetry
         ? "Não encontrei novidades sem repetir as anteriores. Tente outras referências."
         : "Não encontrei recomendações com os filtros atuais.");
+      state.recommendations = previous;
+      state.resultsView = wasResultsView && previous.length > 0;
     } else {
-      state.recommendations = (await enrichAlbums(results)).filter(it => !isKnown(it));
+      const visible = (await enrichAlbums(results)).filter(it => !isKnown(it));
+      state.recommendations = visible.length ? visible : previous;
       state.recommendationSection = "manual";
+      state.resultsView = visible.length > 0 || (wasResultsView && previous.length > 0);
     }
   } catch (error) {
     console.error(error);
     notice(error?.message || "Não foi possível gerar recomendações.");
+    state.recommendations = previous;
+    state.resultsView = wasResultsView && previous.length > 0;
   } finally {
+    finishDiagnostics(delivered);
+    reportApiIssues(delivered.length);
     busy = false;
     saveState();
     render();
@@ -1951,6 +2474,8 @@ function clearManual() {
   state.manualSeen = [];
   state.manualFilters = { ...DEFAULT_FILTERS };
   state.recommendations = [];
+  state.resultsView = false;
+  discoveryFocusKey = null;
   saveState();
   render();
 }
@@ -1983,7 +2508,7 @@ function renderManual() {
     placeholder: state.manualType === "tag" ? "Ex.: alternative hip hop" : "Digite uma referência...",
     value: state.manualQuery
   });
-  input.oninput = () => { state.manualQuery = input.value; };
+  input.oninput = () => { state.manualQuery = input.value; saveState(); };
 
   const searchBtn = el("button", "c12-btn", "Pesquisar");
   searchBtn.onclick = async () => {
@@ -1993,11 +2518,13 @@ function renderManual() {
     searchBtn.disabled = true;
     searchBtn.textContent = "Pesquisando...";
 
+    apiIssues = new Set();
     try {
       const results = await lastfmSearch(state.manualType, query);
       state.manualResults = cleanManualSearchResults(state.manualType, results, query);
       state.manualExpanded = false;
-      if (!state.manualResults.length) notice("Nenhum resultado no Last.fm para essa busca.");
+      if (!state.manualResults.length && !apiIssues.size && !diagnostics.counts.unexpectedWorkerErrors) notice("Nenhum resultado no Last.fm para essa busca.");
+      reportApiIssues();
       saveState();
       render();
     } catch (error) {
@@ -2088,7 +2615,7 @@ function renderManual() {
   /* ---- controles ---- */
   const controls = el("div", "c12-toolbar");
 
-  const clear = el("button", "c12-btn secondary", "🧹 Limpar filtros");
+  const clear = el("button", "c12-btn secondary", "🧹 Limpar pesquisa e filtros");
   clear.onclick = clearManual;
   controls.appendChild(clear);
 
@@ -2096,6 +2623,12 @@ function renderManual() {
     const find = el("button", "c12-btn", busy ? "Pesquisando..." : "🔎 Encontrar recomendações", { disabled: busy });
     find.onclick = () => runManualSearch(false);
     controls.appendChild(find);
+
+    if (hasSectionResults("manual")) {
+      const resume = el("button", "c12-btn secondary", "Ver resultados anteriores", {disabled:busy});
+      resume.onclick = showResults;
+      controls.appendChild(resume);
+    }
 
     if (state.manualSeen.length) {
       const again = el("button", "c12-btn secondary", "↻ Refazer pesquisa", { disabled: busy });
@@ -2107,40 +2640,101 @@ function renderManual() {
   panel.appendChild(controls);
   appRoot.appendChild(panel);
 
-  renderRecommendations();
 }
 
 /* ============================================================
    RECOMENDAÇÕES — UI
    ============================================================ */
 function renderRecommendations() {
+  const stage = el("div", "c12-stage-top");
+  const copy = el("div", "c12-stage-copy");
+  copy.appendChild(el("div", "c12-stage-kicker", state.section === "manual" ? "Pesquisa manual" : "Descoberta automática"));
+  copy.appendChild(el("div", "c12-stage-title", "Suas descobertas"));
+  const count = state.recommendations?.filter(it => !isKnown(it)).length || 0;
+  copy.appendChild(el("div", "c12-stage-detail", busy ? "Preparando outra seleção…" : `${count} descoberta${count === 1 ? "" : "s"} · seus ajustes foram preservados`));
+  stage.appendChild(copy);
+  const stageActions = el("div", "c12-stage-actions");
+  const settings = el("button", "c12-btn secondary", "← Voltar às configurações", {disabled:busy});
+  settings.onclick = showSettings;
+  stageActions.appendChild(settings);
+  if (!busy && count) {
+    const another = el("button", "c12-btn", "↻ Novas descobertas");
+    another.onclick = () => state.section === "manual" ? runManualSearch(true) : runPersonalized();
+    stageActions.appendChild(another);
+    const clear = el("button", "c12-btn secondary", "Limpar resultados");
+    clear.onclick = () => {
+      state.recommendations = [];
+      state.resultsView = false;
+      discoveryFocusKey = null;
+      saveState(); render();
+    };
+    stageActions.appendChild(clear);
+  }
+  stage.appendChild(stageActions);
+  appRoot.appendChild(stage);
+
   if (busy) {
-    appRoot.appendChild(el("div", "c12-loading", "Buscando novas descobertas…"));
+    appRoot.appendChild(el("div", "c12-loading c12-stage-loading", "Buscando novas descobertas…"));
+    return;
+  }
+  if (!hasSectionResults()) return;
+  const visible = state.recommendations.filter(it => !isKnown(it));
+  if (!visible.length) {
+    appRoot.appendChild(el("div", "c12-empty", "Todas as descobertas foram marcadas como conhecidas. Volte às configurações para pesquisar novamente."));
+    return;
+  }
+  const focusIndex = discoveryFocusKey == null ? -1 : visible.findIndex(it => candidateKey(it) === discoveryFocusKey);
+  const focused = focusIndex >= 0;
+  if (!focused) discoveryFocusKey = null;
+
+  const heading = el("div", "c12-section-heading");
+  heading.appendChild(el("div", "c12-panel-title", focused ? "Explorar descoberta" : "Seleção para você"));
+  heading.appendChild(el("div", "c12-result-count", focused ? `${focusIndex + 1} de ${visible.length}` : `${visible.length} descobertas`));
+  appRoot.appendChild(heading);
+
+  if (focused) {
+    const toolbar = el("div", "c12-toolbar");
+    toolbar.style.marginTop = "0";
+    const back = el("button", "c12-btn secondary", "← Voltar à grade");
+    back.onclick = () => { discoveryFocusKey = null; render(); };
+    toolbar.appendChild(back);
+    appRoot.appendChild(toolbar);
+  }
+
+  if (focused) {
+    const focus = el("div", "c12-focus");
+    focus.appendChild(renderCard(visible[focusIndex]));
+    const nav = el("div", "c12-focus-nav");
+    const prev = el("button", "c12-btn secondary", "← Anterior", {disabled:focusIndex === 0});
+    const next = el("button", "c12-btn", "Próxima →", {disabled:focusIndex === visible.length - 1});
+    prev.onclick = () => { discoveryFocusKey = candidateKey(visible[focusIndex - 1]); render(); };
+    next.onclick = () => { discoveryFocusKey = candidateKey(visible[focusIndex + 1]); render(); };
+    nav.append(prev, next);
+    focus.appendChild(nav);
+    appRoot.appendChild(focus);
     return;
   }
 
-  if (!state.recommendations?.length || state.recommendationSection !== state.section) return;
-  // Proteção adicional para listas restauradas de sessões anteriores.
-  const visibleRecommendations = state.recommendations.filter(it => !isKnown(it));
-  if (!visibleRecommendations.length) return;
-
-  const resultsHeader = el("div", "c12-section-heading");
-  resultsHeader.appendChild(el("div", "c12-panel-title", "Seleção para você"));
-  resultsHeader.appendChild(el("div", "c12-result-count", `${visibleRecommendations.length} descobertas`));
-  appRoot.appendChild(resultsHeader);
-
-  const toolbar = el("div", "c12-toolbar");
-  toolbar.style.marginTop = "0";
-
-  const clearResults = el("button", "c12-btn secondary", "Limpar resultados");
-  clearResults.onclick = () => { state.recommendations = []; saveState(); render(); };
-  toolbar.appendChild(clearResults);
-  appRoot.appendChild(toolbar);
-
-  const container = el("div", "c12-results");
-  container.style.marginTop = "0";
-  for (const item of visibleRecommendations) container.appendChild(renderCard(item));
-  appRoot.appendChild(container);
+  const gallery = el("div", "c12-gallery");
+  visible.forEach((item, index) => {
+    const card = el("button", "c12-gallery-card");
+    card.type = "button";
+    card.setAttribute("aria-label", `Explorar ${item.type === "track" ? item.track : item.type === "album" ? item.album : item.artist}`);
+    const cover = item.image
+      ? el("img", "c12-gallery-cover", null, {src:item.image, loading:"lazy", alt:""})
+      : el("div", "c12-gallery-cover c12-gallery-placeholder", item.type === "artist" ? "👤" : "💿");
+    if (item.image) cover.onerror = () => cover.replaceWith(el("div", "c12-gallery-cover c12-gallery-placeholder", "💿"));
+    card.appendChild(cover);
+    const info = el("div", "c12-gallery-info");
+    info.appendChild(el("div", "c12-gallery-type", item.type === "artist" ? "ARTISTA" : item.type === "track" ? "MÚSICA" : "ÁLBUM"));
+    info.appendChild(el("div", "c12-gallery-title", item.type === "track" ? item.track : item.type === "album" ? item.album : item.artist));
+    if (item.type !== "artist") info.appendChild(el("div", "c12-gallery-artist", item.artist || ""));
+    card.appendChild(info);
+    card.onclick = () => { discoveryFocusKey = candidateKey(item); render(); };
+    card.style.animationDelay = `${Math.min(index, 8) * 25}ms`;
+    gallery.appendChild(card);
+  });
+  appRoot.appendChild(gallery);
 }
 
 function renderLiked() {
@@ -2220,11 +2814,13 @@ function renderCard(item, fromLiked = false) {
 
   /* capa (sempre ocupa o espaço, para o layout não pular) */
   if (item.image) {
-    card.appendChild(el("img", "c12-cover", null, {
+    const cover = el("img", "c12-cover", null, {
       src: item.image,
       loading: "lazy",
-      alt: item.album || item.track || item.artist || ""
-    }));
+      alt: (item.type === "track" ? item.track : item.type === "album" ? item.album : item.artist) || ""
+    });
+    cover.onerror = () => cover.replaceWith(el("div", "c12-cover", item.type === "artist" ? "👤" : "💿"));
+    card.appendChild(cover);
   } else {
     card.appendChild(el("div", "c12-cover", item.type === "artist" ? "👤" : "💿"));
   }
@@ -2258,6 +2854,7 @@ function renderCard(item, fromLiked = false) {
 
   if (item.spotifyUrl || item.spotifyUri) {
     const open = el("button", "c12-btn secondary", "Abrir no Spotify ↗");
+    open.title = item.type === "track" ? "Abrir a página desta faixa (reprodução automática depende do Spotify)" : "Abrir no Spotify";
     open.onclick = e => { e.stopPropagation(); openSpotify(item); };
     actions.appendChild(open);
   }
@@ -2319,12 +2916,14 @@ function renderCard(item, fromLiked = false) {
     const b = el("button", "c12-btn secondary", label);
     b.onclick = async e => {
       e.stopPropagation();
+      if (b.disabled) return;
+      b.disabled = true;
       try {
         await appendFeedback(item, action);
-        b.disabled = true;
       } catch (error) {
         console.error(error);
         notice("Não foi possível salvar o feedback.");
+        b.disabled = false;
       }
     };
     fb.appendChild(b);

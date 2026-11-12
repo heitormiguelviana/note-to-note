@@ -1,0 +1,38 @@
+[
+  {
+    "source": "src/Relatorio.md",
+    "backup": "betas/backups/pre-release-v1.3.0/Relatorio.md",
+    "version": "3.6.1",
+    "sha256": "d45719f1a609c6836cbd3f5cea545d2533f9d63c66c49b1a976c346bcacad476"
+  },
+  {
+    "source": "src/Monitor.md",
+    "backup": "betas/backups/pre-release-v1.3.0/Monitor.md",
+    "version": "1.30",
+    "sha256": "d1e58edc211421a73085a05ca9056ec07c5f34ff53f50e3e81cc14374aab41e0"
+  },
+  {
+    "source": "src/Diario.Musical.md",
+    "backup": "betas/backups/pre-release-v1.3.0/Diario.Musical.md",
+    "version": "1.3.1",
+    "sha256": "905f5daa72f67f854a5c6ade6ee9817c9822f935d52ea8a955a6d57c73817e4a"
+  },
+  {
+    "source": "src/Configuracoes.md",
+    "backup": "betas/backups/pre-release-v1.3.0/Configuracoes.md",
+    "version": "2.5.0",
+    "sha256": "3647f0a8d23824d9092011b357b4e48ac0c7aa4a72750d754782f84a4b2c52f6"
+  },
+  {
+    "source": "src/Central.md",
+    "backup": "betas/backups/pre-release-v1.3.0/Central.md",
+    "version": "1.9",
+    "sha256": "447765bef2b05cc01cc89c1fe6532e9e6c6c6dd781244fb022600f00ea04185e"
+  },
+  {
+    "source": "src/Roleta.md",
+    "backup": "betas/backups/pre-release-v1.3.0/Roleta.md",
+    "version": "1.2",
+    "sha256": "3efd871762b65cebd27d27b3d7062a3c9f90a6f030b52244e5dd1334e0b3d9df"
+  }
+]

@@ -1,6 +1,6 @@
 ```dataviewjs
 // ============================================================
-// RELATÓRIO MUSICAL V3.6.1 — CORREÇÃO DE RECUPERAÇÃO DE PERÍODOS
+// RELATÓRIO MUSICAL V3.7.0 — INTERFACE UNIFICADA
 // Last.fm + Deezer + catálogo MediaDB
 //
 // BASE:
@@ -1104,6 +1104,60 @@ const CSS = `
 .music-report .nr-export-copy:hover { border-color:var(--nr-accent)!important; }
 .music-report .tp-actions,.music-report .hero-actions { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
 @media(max-width:460px) { .nr-export-dialog { padding:18px; } .nr-export-actions { grid-template-columns:1fr; } .music-report .hero-actions { width:100%; } .music-report .hero-actions button { flex:1 1 auto; } }
+
+/* NTN VISUAL — START */
+.music-report.ntn-visual-beta {
+ --ntn-ui-bg:#191d23; --ntn-ui-surface:#22272e; --ntn-ui-raised:#292f38;
+ --ntn-ui-border:#3b4652; --ntn-ui-text:#e9edf0; --ntn-ui-muted:#a6b2bf;
+ --ntn-ui-accent:#9bb6ce; --ntn-ui-selected:#2c3b4a;
+ --ntn-ui-success:#8fc5ad; --ntn-ui-warning:#d9bb82; --ntn-ui-error:#e3a0a0;
+ --ntn-ui-radius:8px; --ntn-ui-control:38px;
+ --ntn-ui-space-1:4px; --ntn-ui-space-2:8px; --ntn-ui-space-3:12px; --ntn-ui-space-4:16px; --ntn-ui-space-5:24px;
+ --nt-bg:var(--ntn-ui-bg); --nt-surface:var(--ntn-ui-surface); --nt-surface-2:var(--ntn-ui-raised);
+ --nt-line:var(--ntn-ui-border); --nt-ink:var(--ntn-ui-text); --nt-muted:var(--ntn-ui-muted);
+ --nt-accent:var(--ntn-ui-accent); --nt-accent-bg:var(--ntn-ui-selected);
+ --ntn-bg:var(--ntn-ui-bg); --ntn-panel:var(--ntn-ui-surface); --ntn-raised:var(--ntn-ui-raised);
+ --ntn-border:var(--ntn-ui-border); --ntn-accent:var(--ntn-ui-accent); --ntn-ink:var(--ntn-ui-text); --ntn-muted:var(--ntn-ui-muted);
+ --nr-bg:var(--ntn-ui-bg); --nr-panel:var(--ntn-ui-surface); --nr-border:var(--ntn-ui-border); --nr-accent:var(--ntn-ui-accent); --nr-muted:var(--ntn-ui-muted);
+ width:100%; max-width:1100px!important; min-width:0; margin:0 auto;
+ color:var(--ntn-ui-text); font-family:var(--font-interface),system-ui,sans-serif;
+ font-size:14px; line-height:1.55; color-scheme:dark;
+}
+.music-report.ntn-visual-beta, .music-report.ntn-visual-beta * {box-sizing:border-box;}
+.music-report.ntn-visual-beta > * {min-width:0;}
+.music-report.ntn-visual-beta button {min-height:var(--ntn-ui-control)!important; max-width:100%; height:auto; white-space:normal!important; overflow-wrap:anywhere;
+ font-family:inherit; font-size:12px!important; font-weight:600; line-height:1.35; padding:8px 12px!important;
+ border-radius:6px!important; border:1px solid var(--ntn-ui-border)!important;
+ background:var(--ntn-ui-surface)!important; color:var(--ntn-ui-text)!important; box-shadow:none!important;
+ touch-action:manipulation;}
+.music-report.ntn-visual-beta button:hover:not(:disabled) {border-color:var(--ntn-ui-accent)!important;}
+.music-report.ntn-visual-beta .export-button,.music-report.ntn-visual-beta .nr-apply, .music-report.ntn-visual-beta button.active, .music-report.ntn-visual-beta button.is-active {background:var(--ntn-ui-selected)!important; border-color:var(--ntn-ui-accent)!important; color:var(--ntn-ui-text)!important;}
+.music-report.ntn-visual-beta button:disabled {opacity:.5; cursor:default;}
+.music-report.ntn-visual-beta :is(button,input,select,textarea,a,summary):focus-visible {outline:2px solid var(--ntn-ui-accent); outline-offset:3px;}
+.music-report.ntn-visual-beta :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea) {
+ min-height:var(--ntn-ui-control); min-width:0; max-width:100%; padding:8px 10px; border-radius:6px!important;
+ background:var(--ntn-ui-bg)!important; color:var(--ntn-ui-text)!important; border:1px solid var(--ntn-ui-border)!important; font-family:inherit; font-size:12px;}
+.music-report.ntn-visual-beta :is(input[type=checkbox],input[type=radio],input[type=range]) {accent-color:var(--ntn-ui-accent);}
+.music-report.ntn-visual-beta .panel,.music-report.ntn-visual-beta .stat,.music-report.ntn-visual-beta .card {border-radius:var(--ntn-ui-radius)!important; border-color:var(--ntn-ui-border)!important;}
+.music-report.ntn-visual-beta h1 {font-size:clamp(25px,3.5vw,34px); line-height:1.18; letter-spacing:-.035em; font-weight:750; overflow-wrap:anywhere;}
+.music-report.ntn-visual-beta :is(h2,h3) {line-height:1.3; overflow-wrap:anywhere;}
+.music-report.ntn-visual-beta :is(summary,label) {overflow-wrap:anywhere;}
+.music-report.ntn-visual-beta summary {min-height:32px; cursor:pointer;}
+.music-report.ntn-visual-beta :is(table,pre) {max-width:100%;}
+.music-report.ntn-visual-beta pre {white-space:pre-wrap; overflow-wrap:anywhere;}
+.music-report.ntn-visual-beta :is(.stat-value,.mm-stat-value,.music-diary-stat-value) {font-variant-numeric:tabular-nums;}
+@media (max-width:650px) {
+ .music-report.ntn-visual-beta {padding:16px 12px 24px!important;}
+ .music-report.ntn-visual-beta button {min-height:44px!important;}
+ .music-report.ntn-visual-beta :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select) {min-height:42px;}
+}
+@media (prefers-reduced-motion:reduce) {
+ .music-report.ntn-visual-beta *, .music-report.ntn-visual-beta *::before, .music-report.ntn-visual-beta *::after {animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; scroll-behavior:auto!important;}
+}
+.music-report.ntn-visual-beta {background:var(--ntn-ui-bg)!important;color:var(--ntn-ui-text)!important;padding:24px!important;border:1px solid var(--ntn-ui-border);border-radius:10px}.music-report.ntn-visual-beta .panel {padding:20px}.music-report.ntn-visual-beta .stat {border-radius:8px}.music-report.ntn-visual-beta .stat-value {color:var(--ntn-ui-accent)}.music-report.ntn-visual-beta .subtitle,.music-report.ntn-visual-beta .section-subtitle,.music-report.ntn-visual-beta .stat-label {color:var(--ntn-ui-muted)}.music-report.ntn-visual-beta .section-title {font-size:17px}.music-report.ntn-visual-beta .tabs,.music-report.ntn-visual-beta .periods {gap:8px}.music-report.ntn-visual-beta .tp-preview {max-width:100%;overflow:auto}
+@media(max-width:650px) { .music-report.ntn-visual-beta :is(.mc-grid,.mm-diagnostics) {grid-template-columns:repeat(2,minmax(0,1fr));} .music-report.ntn-visual-beta .mc-shell {padding:16px 12px;} }
+@media(max-width:420px) { .music-report.ntn-visual-beta :is(.mc-grid,.mm-diagnostics) {grid-template-columns:1fr;} }
+/* NTN VISUAL — END */
 `;
 
 // ============================================================
@@ -3041,7 +3095,7 @@ function renderTopster(root, data) {
 function render(root, data) {
   root.empty();
 
-  root.addClass("music-report");
+  root.addClass("music-report"); root.addClass("ntn-visual-beta");
 
   addStyles(root);
 
@@ -3176,7 +3230,7 @@ async function build(root) {
   const myBuildToken = ++reportBuildToken;
   root.empty();
 
-  root.addClass("music-report");
+  root.addClass("music-report"); root.addClass("ntn-visual-beta");
 
   addStyles(root);
 
